@@ -13,6 +13,8 @@ pub trait Execute {
 //     fn parse(command: &str, args: &[&str]) -> Result<Command>;
 // }
 
+pub type Args = Vec<String>;
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum Command {
     // TODO 修改逻辑 判断是否是 builtin -> 是 -> 解析 builtin 并执行
@@ -62,8 +64,6 @@ impl UnknownCommand {
         Self { command, args }
     }
 }
-
-type Args = Vec<String>;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum ParseCommandError {
@@ -132,22 +132,15 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_type_builtin() {
+    fn test_parse_type() {
         assert_eq!(
-            Command::parse("type echo").unwrap(),
-            Command::BuiltinCommand(BuiltinCommand::Type(Type::BuiltinCommand(
-                "echo".to_string()
-            )))
-        );
-    }
-
-    #[test]
-    fn test_parse_type_unrecognized() {
-        assert_eq!(
-            Command::parse("type invalid_command").unwrap(),
-            Command::BuiltinCommand(BuiltinCommand::Type(Type::UnrecognizedCommand(
-                "invalid_command".to_string()
-            )))
+            Command::parse("type echo type exit invalid_command").unwrap(),
+            Command::BuiltinCommand(BuiltinCommand::Type(vec![
+                Type::BuiltinCommand("echo".to_string()),
+                Type::BuiltinCommand("type".to_string()),
+                Type::BuiltinCommand("exit".to_string()),
+                Type::UnrecognizedCommand("invalid_command".to_string()),
+            ]))
         );
     }
 

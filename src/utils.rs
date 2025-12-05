@@ -10,3 +10,7 @@ pub fn config_logger() {
         .finish();
     tracing::subscriber::set_global_default(subscriber).expect("Failed to set global subscriber");
 }
+
+pub fn set_env_path() {
+    unsafe { std::env::set_var("PATH", "/usr/bin:/usr/local/bin:$PATH") };
+}

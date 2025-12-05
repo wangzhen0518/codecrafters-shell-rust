@@ -2,7 +2,10 @@
 
 use std::io::{self, Write};
 
-use crate::command::{Command, Execute};
+use crate::{
+    command::{Command, Execute},
+    executable::load_env_path,
+};
 
 mod builtin;
 mod command;
@@ -25,6 +28,8 @@ fn execute_command(input: &str) {
 
 fn main() {
     utils::config_logger();
+
+    // tracing::debug!("{:?}", load_env_path());
 
     print!("$ ");
     io::stdout().flush().unwrap();
