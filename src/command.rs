@@ -1,14 +1,25 @@
-use std::{collections::HashSet, fmt::Display};
+use std::fmt::Display;
 
-use lazy_static::lazy_static;
+use crate::{
+    builtin::{BuiltinCommand, BUILTIN_COMMANDS},
+    Result,
+};
 
-use crate::Result;
+pub trait Execute {
+    fn execute(&self);
+}
 
+// pub trait Parse {
+//     fn parse(command: &str, args: &[&str]) -> Result<Command>;
+// }
+
+#[derive(Debug, PartialEq, Eq)]
 pub enum Command {
+    // TODO 修改逻辑 判断是否是 builtin -> 是 -> 解析 builtin 并执行
+    // TODO 否 -> PATH 中寻找可执行文件 -> 找到，执行可执行文件
+    // TODO                             -> 未找到，报错无效命令
     Empty,
-    Echo(String),
-    Type(Type),
-    Exit(i32),
+    BuiltinCommand(BuiltinCommand),
     Unknown(UnknownCommand),
 }
 
@@ -16,70 +27,31 @@ impl Command {
     pub fn parse(s: &str) -> Result<Self> {
         let cmd_vec: Vec<String> = s.trim().split(' ').map(|s| s.to_string()).collect();
         let (command, args) = (cmd_vec[0].to_string(), cmd_vec[1..].to_vec());
-
-        let command = match command.as_str() {
-            "" => Command::Empty,
-            "echo" => {
-                let content = if !args.is_empty() {
-                    args.join(" ").to_string()
-                } else {
-                    "\n".to_string()
-                };
-                Command::Echo(content)
-            }
-            "type" => {
-                // TODO 能否统一 check arg num 过程？
-                if args.is_empty() {
-                    return Err(ParseCommandError::LessArgs(command, args, 1).into());
-                }
-
-                Command::Type(Type::parse(args[0].as_str()))
-            }
-            "exit" => {
-                if args.len() > 1 {
-                    return Err(ParseCommandError::MoreArgs(command, args, 1).into());
-                }
-
-                let exit_code: i32 = if args.is_empty() { 0 } else { args[0].parse()? };
-                Command::Exit(exit_code)
-            }
-            _ => Command::Unknown(UnknownCommand { command, args }),
+        let command = if command.is_empty() {
+            Command::Empty
+        } else if BUILTIN_COMMANDS.contains(command.as_str()) {
+            Command::BuiltinCommand(BuiltinCommand::parse(command, args)?)
+        } else {
+            Command::Unknown(UnknownCommand::new(command, args))
+            // unimplemented!() //TODO
         };
         Ok(command)
     }
 }
 
-#[derive(Debug)]
-pub enum Type {
-    BuiltinCommand(String),
-    UnrecognizedCommad(String),
-}
-
-lazy_static! {
-    static ref BUILTIN_COMMANDS: HashSet<&'static str> = HashSet::from(["echo", "type", "exit"]);
-}
-
-impl Type {
-    fn parse(cmd: &str) -> Type {
-        let cmd = cmd.to_string();
-        if BUILTIN_COMMANDS.contains(cmd.as_str()) {
-            Type::BuiltinCommand(cmd)
-        } else {
-            Type::UnrecognizedCommad(cmd)
-        }
-    }
-}
-
-impl Display for Type {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Execute for Command {
+    fn execute(&self) {
         match self {
-            Type::BuiltinCommand(cmd) => write!(f, "{} is a shell builtin", cmd),
-            Type::UnrecognizedCommad(cmd) => write!(f, "{}: not found", cmd),
+            Command::Empty => {}
+            Command::BuiltinCommand(builtin_command) => builtin_command.execute(),
+            Command::Unknown(unknown_command) => {
+                println!("{}: command not found", unknown_command.command)
+            }
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct UnknownCommand {
     pub command: String,
     pub args: Args,
@@ -93,7 +65,7 @@ impl UnknownCommand {
 
 type Args = Vec<String>;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ParseCommandError {
     LessArgs(String, Args, usize),
     MoreArgs(String, Args, usize),
@@ -113,3 +85,81 @@ impl Display for ParseCommandError {
 }
 
 impl std::error::Error for ParseCommandError {}
+
+#[cfg(test)]
+mod tests {
+    use crate::builtin::Type;
+
+    use super::*;
+
+    #[test]
+    fn test_parse_empty() {
+        assert!(matches!(Command::parse(""), Ok(Command::Empty)));
+    }
+
+    #[test]
+    fn test_parse_unknown() {
+        assert_eq!(
+            Command::parse("invalid_command invalid args").unwrap(),
+            Command::Unknown(UnknownCommand::new(
+                "invalid_command".to_string(),
+                vec!["invalid".to_string(), "args".to_string()]
+            ))
+        );
+    }
+
+    #[test]
+    fn test_parse_echo() {
+        assert_eq!(
+            Command::parse("echo").unwrap(),
+            Command::BuiltinCommand(BuiltinCommand::Echo("\n".to_string()))
+        );
+        assert_eq!(
+            Command::parse("echo abc  123").unwrap(),
+            Command::BuiltinCommand(BuiltinCommand::Echo("abc  123".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_parse_type_error() {
+        assert_eq!(
+            Command::parse("type")
+                .unwrap_err()
+                .downcast::<ParseCommandError>()
+                .unwrap(),
+            ParseCommandError::LessArgs("type".to_string(), vec![], 1).into()
+        );
+    }
+
+    #[test]
+    fn test_parse_type_builtin() {
+        assert_eq!(
+            Command::parse("type echo").unwrap(),
+            Command::BuiltinCommand(BuiltinCommand::Type(Type::BuiltinCommand(
+                "echo".to_string()
+            )))
+        );
+    }
+
+    #[test]
+    fn test_parse_type_unrecognized() {
+        assert_eq!(
+            Command::parse("type invalid_command").unwrap(),
+            Command::BuiltinCommand(BuiltinCommand::Type(Type::UnrecognizedCommand(
+                "invalid_command".to_string()
+            )))
+        );
+    }
+
+    #[test]
+    fn test_parse_exit() {
+        assert_eq!(
+            Command::parse("exit").unwrap(),
+            Command::BuiltinCommand(BuiltinCommand::Exit(0))
+        );
+        assert_eq!(
+            Command::parse("exit 123").unwrap(),
+            Command::BuiltinCommand(BuiltinCommand::Exit(123))
+        );
+    }
+}

@@ -1,13 +1,12 @@
 #![allow(dead_code)]
 
-use std::{
-    io::{self, Write},
-    process::exit,
-};
+use std::io::{self, Write};
 
-use crate::command::Command;
+use crate::command::{Command, Execute};
 
+mod builtin;
 mod command;
+mod executable;
 mod utils;
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
@@ -15,15 +14,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 fn execute_command(input: &str) {
     match Command::parse(input) {
-        Ok(command) => match command {
-            Command::Empty => {}
-            Command::Echo(content) => println!("{}", content),
-            Command::Type(ty) => println!("{}", ty),
-            Command::Exit(exit_code) => exit(exit_code),
-            Command::Unknown(unknown_command) => {
-                println!("{}: command not found", unknown_command.command)
-            }
-        },
+        Ok(command) => command.execute(),
         Err(err) => tracing::error!(
             "Failed to parse input: \"{}\", Error: {}",
             input.trim(),
