@@ -16,12 +16,17 @@ pub type Result<T> = std::result::Result<T, Error>;
 fn execute_command(input: &str) {
     match Command::parse(input) {
         Ok(command) => match command {
+            Command::Echo(content) => println!("{}", content),
             Command::Exit(exit_code) => exit(exit_code),
             Command::Unknown(unknown_command) => {
                 println!("{}: command not found", unknown_command.command)
             }
         },
-        Err(err) => println!("Failed to parse input: \"{}\", Error: {}", input.trim(), err),
+        Err(err) => println!(
+            "Failed to parse input: \"{}\", Error: {}",
+            input.trim(),
+            err
+        ),
     }
 }
 

@@ -3,8 +3,9 @@ use std::fmt::Display;
 use crate::Result;
 
 pub enum Command {
-    Unknown(UnknownCommand),
+    Echo(String),
     Exit(i32),
+    Unknown(UnknownCommand),
 }
 
 impl Command {
@@ -15,6 +16,7 @@ impl Command {
         }
 
         let command = match cmd_vec[0] {
+            "echo" => Command::Echo(cmd_vec[1..].join(" ").to_string()),
             "exit" => {
                 if cmd_vec.len() > 2 {
                     return Err(ParseCommandError::MoreArgs(
