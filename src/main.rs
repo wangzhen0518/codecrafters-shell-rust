@@ -2,10 +2,7 @@
 
 use std::io::{self, Write};
 
-use crate::{
-    command::{Command, Execute},
-    executable::load_env_path,
-};
+use crate::command::{Command, Execute, Parse};
 
 mod builtin;
 mod command;
@@ -15,12 +12,26 @@ mod utils;
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
 pub type Result<T> = std::result::Result<T, Error>;
 
-fn execute_command(input: &str) {
-    match Command::parse(input) {
+fn parse_input() -> Result<(String, Vec<String>)> {
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+
+    let cmd_vec: Vec<String> = input.trim().split(' ').map(|s| s.to_string()).collect();
+
+    if !cmd_vec.is_empty() {
+        Ok((cmd_vec[0].clone(), cmd_vec[1..].to_vec()))
+    } else {
+        Ok(("".to_string(), cmd_vec))
+    }
+}
+
+fn execute_command(command: &str, args: &[&str]) {
+    match Command::parse(command, args) {
         Ok(command) => command.execute(),
         Err(err) => tracing::error!(
-            "Failed to parse input: \"{}\", Error: {}",
-            input.trim(),
+            "Failed to parse command: \"{}\", args: \"{:?}\", Error: {}",
+            command,
+            args,
             err
         ),
     }
@@ -29,20 +40,17 @@ fn execute_command(input: &str) {
 fn main() {
     utils::config_logger();
 
-    // tracing::debug!("{:?}", load_env_path());
-
-    print!("$ ");
-    io::stdout().flush().unwrap();
-
-    // Wait for user input
-    let mut input = String::new();
     loop {
-        match io::stdin().read_line(&mut input) {
-            Ok(_) => execute_command(&input),
-            Err(err) => tracing::error!("{}", err),
-        }
-        input.clear();
         print!("$ ");
+        io::stdout().flush().unwrap();
+
+        match parse_input() {
+            Ok((command, args)) => execute_command(
+                &command,
+                &args.iter().map(|arg| arg.as_str()).collect::<Vec<&str>>(),
+            ),
+            Err(err) => tracing::error!(err),
+        }
         io::stdout().flush().unwrap();
     }
 }

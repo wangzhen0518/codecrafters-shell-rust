@@ -2,7 +2,7 @@ use std::{env, path::PathBuf, process};
 
 use is_executable::IsExecutable;
 
-use crate::command::{Args, Execute};
+use crate::command::{Args, Execute, Parse};
 
 pub fn load_path_var() -> String {
     env::var("PATH").expect("Invalid $PATH")
@@ -39,6 +39,23 @@ pub struct Executable {
 impl Executable {
     pub fn new(name: String, path: PathBuf, args: Args) -> Self {
         Self { name, path, args }
+    }
+}
+
+impl Parse for Executable {
+    fn parse(command: &str, args: &[&str]) -> crate::Result<Self>
+    where
+        Self: std::marker::Sized,
+    {
+        if let Some(exec_path) = find_in_path(command) {
+            Ok(Executable::new(
+                command.to_string(),
+                exec_path,
+                args.iter().map(|arg| arg.to_string()).collect(),
+            ))
+        } else {
+            Err("Cannot find executable".into())
+        }
     }
 }
 

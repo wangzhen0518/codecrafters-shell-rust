@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use crate::{
     builtin::{BuiltinCommand, BUILTIN_COMMANDS},
-    executable::{find_in_path, Executable},
+    executable::Executable,
     Result,
 };
 
@@ -10,9 +10,11 @@ pub trait Execute {
     fn execute(&self);
 }
 
-// pub trait Parse {
-//     fn parse(command: &str, args: &[&str]) -> Result<Command>;
-// }
+pub trait Parse {
+    fn parse(command: &str, args: &[&str]) -> Result<Self>
+    where
+        Self: std::marker::Sized;
+}
 
 pub type Args = Vec<String>;
 
@@ -24,18 +26,22 @@ pub enum Command {
     Unknown(UnknownCommand),
 }
 
-impl Command {
-    pub fn parse(s: &str) -> Result<Self> {
-        let cmd_vec: Vec<String> = s.trim().split(' ').map(|s| s.to_string()).collect();
-        let (command, args) = (cmd_vec[0].to_string(), cmd_vec[1..].to_vec());
+impl Parse for Command {
+    fn parse(command: &str, args: &[&str]) -> Result<Self>
+    where
+        Self: std::marker::Sized,
+    {
         let command = if command.is_empty() {
             Command::Empty
-        } else if BUILTIN_COMMANDS.contains(command.as_str()) {
+        } else if BUILTIN_COMMANDS.contains(command) {
             Command::BuiltinCommand(BuiltinCommand::parse(command, args)?)
-        } else if let Some(exec_path) = find_in_path(&command) {
-            Command::Executable(Executable::new(command, exec_path, args))
+        } else if let Ok(exec) = Executable::parse(command, args) {
+            Command::Executable(exec)
         } else {
-            Command::Unknown(UnknownCommand::new(command, args))
+            Command::Unknown(UnknownCommand::new(
+                command.to_string(),
+                args.iter().map(|arg| arg.to_string()).collect(),
+            ))
         };
         Ok(command)
     }
@@ -89,19 +95,17 @@ impl std::error::Error for ParseCommandError {}
 
 #[cfg(test)]
 mod tests {
-    use crate::builtin::Type;
-
     use super::*;
 
     #[test]
     fn test_parse_empty() {
-        assert!(matches!(Command::parse(""), Ok(Command::Empty)));
+        assert!(matches!(Command::parse("", &[]), Ok(Command::Empty)));
     }
 
     #[test]
     fn test_parse_unknown() {
         assert_eq!(
-            Command::parse("invalid_command invalid args").unwrap(),
+            Command::parse("invalid_command", &["invalid", "args"]).unwrap(),
             Command::Unknown(UnknownCommand::new(
                 "invalid_command".to_string(),
                 vec!["invalid".to_string(), "args".to_string()]
@@ -110,49 +114,13 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_echo() {
-        assert_eq!(
-            Command::parse("echo").unwrap(),
-            Command::BuiltinCommand(BuiltinCommand::Echo("\n".to_string()))
-        );
-        assert_eq!(
-            Command::parse("echo abc  123").unwrap(),
-            Command::BuiltinCommand(BuiltinCommand::Echo("abc  123".to_string()))
-        );
-    }
-
-    #[test]
-    fn test_parse_type_error() {
-        assert_eq!(
-            Command::parse("type")
-                .unwrap_err()
-                .downcast::<ParseCommandError>()
-                .unwrap(),
-            ParseCommandError::LessArgs("type".to_string(), vec![], 1).into()
-        );
-    }
-
-    #[test]
-    fn test_parse_type() {
-        assert_eq!(
-            Command::parse("type echo type exit invalid_command").unwrap(),
-            Command::BuiltinCommand(BuiltinCommand::Type(vec![
-                Type::BuiltinCommand("echo".to_string()),
-                Type::BuiltinCommand("type".to_string()),
-                Type::BuiltinCommand("exit".to_string()),
-                Type::UnrecognizedCommand("invalid_command".to_string()),
-            ]))
-        );
-    }
-
-    #[test]
     fn test_parse_exit() {
         assert_eq!(
-            Command::parse("exit").unwrap(),
+            Command::parse("exit", &[]).unwrap(),
             Command::BuiltinCommand(BuiltinCommand::Exit(0))
         );
         assert_eq!(
-            Command::parse("exit 123").unwrap(),
+            Command::parse("exit", &["123"]).unwrap(),
             Command::BuiltinCommand(BuiltinCommand::Exit(123))
         );
     }

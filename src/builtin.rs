@@ -3,7 +3,7 @@ use std::{collections::HashSet, env, fmt::Display, path::PathBuf};
 use lazy_static::lazy_static;
 
 use crate::{
-    command::{Execute, ParseCommandError},
+    command::{Execute, Parse, ParseCommandError},
     executable::{find_in_path, Executable},
     Result,
 };
@@ -22,9 +22,12 @@ pub enum BuiltinCommand {
     Exit(i32),
 }
 
-impl BuiltinCommand {
-    pub fn parse(command: String, args: Vec<String>) -> Result<BuiltinCommand> {
-        let builtin_command = match command.as_str() {
+impl Parse for BuiltinCommand {
+    fn parse(command: &str, args: &[&str]) -> Result<Self>
+    where
+        Self: std::marker::Sized,
+    {
+        let builtin_command = match command {
             "echo" => {
                 let content = if !args.is_empty() {
                     args.join(" ").to_string()
@@ -36,21 +39,36 @@ impl BuiltinCommand {
             "type" => {
                 // TODO 能否统一 check arg num 过程？
                 if args.is_empty() {
-                    return Err(ParseCommandError::LessArgs(command, args, 1).into());
+                    return Err(ParseCommandError::LessArgs(
+                        command.to_string(),
+                        args.iter().map(|arg| arg.to_string()).collect(),
+                        1,
+                    )
+                    .into());
                 }
 
                 BuiltinCommand::Type(args.iter().map(|arg| Type::parse(arg)).collect())
             }
             "pwd" => {
                 if !args.is_empty() {
-                    return Err(ParseCommandError::MoreArgs(command, args, 0).into());
+                    return Err(ParseCommandError::MoreArgs(
+                        command.to_string(),
+                        args.iter().map(|arg| arg.to_string()).collect(),
+                        0,
+                    )
+                    .into());
                 }
 
                 BuiltinCommand::Pwd
             }
             "cd" => {
                 if args.len() > 1 {
-                    return Err(ParseCommandError::MoreArgs(command, args, 1).into());
+                    return Err(ParseCommandError::MoreArgs(
+                        command.to_string(),
+                        args.iter().map(|arg| arg.to_string()).collect(),
+                        1,
+                    )
+                    .into());
                 }
 
                 let target_dir = if !args.is_empty() {
@@ -62,7 +80,12 @@ impl BuiltinCommand {
             }
             "exit" => {
                 if args.len() > 1 {
-                    return Err(ParseCommandError::MoreArgs(command, args, 1).into());
+                    return Err(ParseCommandError::MoreArgs(
+                        command.to_string(),
+                        args.iter().map(|arg| arg.to_string()).collect(),
+                        1,
+                    )
+                    .into());
                 }
 
                 let exit_code: i32 = if args.is_empty() { 0 } else { args[0].parse()? };
@@ -156,15 +179,11 @@ mod tests {
     #[test]
     fn test_parse_echo() {
         assert_eq!(
-            BuiltinCommand::parse("echo".to_string(), vec![]).unwrap(),
+            BuiltinCommand::parse("echo", &[]).unwrap(),
             BuiltinCommand::Echo("\n".to_string())
         );
         assert_eq!(
-            BuiltinCommand::parse(
-                "echo".to_string(),
-                vec!["abc".to_string(), "".to_string(), "123".to_string()]
-            )
-            .unwrap(),
+            BuiltinCommand::parse("echo", &["abc", "", "123"]).unwrap(),
             BuiltinCommand::Echo("abc  123".to_string())
         );
     }
@@ -172,7 +191,7 @@ mod tests {
     #[test]
     fn test_parse_type_error() {
         assert_eq!(
-            BuiltinCommand::parse("type".to_string(), vec![])
+            BuiltinCommand::parse("type", &[])
                 .unwrap_err()
                 .downcast::<ParseCommandError>()
                 .unwrap(),
@@ -184,17 +203,8 @@ mod tests {
     fn test_parse_type() {
         set_env_path();
         assert_eq!(
-            BuiltinCommand::parse(
-                "type".to_string(),
-                vec![
-                    "echo".to_string(),
-                    "type".to_string(),
-                    "exit".to_string(),
-                    "ls".to_string(),
-                    "invalid_command".to_string()
-                ]
-            )
-            .unwrap(),
+            BuiltinCommand::parse("type", &["echo", "type", "exit", "ls", "invalid_command"])
+                .unwrap(),
             BuiltinCommand::Type(vec![
                 Type::BuiltinCommand("echo".to_string()),
                 Type::BuiltinCommand("type".to_string()),
@@ -212,11 +222,11 @@ mod tests {
     #[test]
     fn test_parse_exit() {
         assert_eq!(
-            BuiltinCommand::parse("exit".to_string(), vec![]).unwrap(),
+            BuiltinCommand::parse("exit", &[]).unwrap(),
             BuiltinCommand::Exit(0)
         );
         assert_eq!(
-            BuiltinCommand::parse("exit".to_string(), vec!["123".to_string()]).unwrap(),
+            BuiltinCommand::parse("exit", &["123"]).unwrap(),
             BuiltinCommand::Exit(123)
         );
     }
