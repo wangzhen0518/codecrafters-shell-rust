@@ -1,4 +1,4 @@
-use std::{collections::HashSet, fmt::Display};
+use std::{collections::HashSet, env, fmt::Display, path::PathBuf};
 
 use lazy_static::lazy_static;
 
@@ -10,13 +10,14 @@ use crate::{
 
 lazy_static! {
     pub static ref BUILTIN_COMMANDS: HashSet<&'static str> =
-        HashSet::from(["echo", "type", "exit"]);
+        HashSet::from(["echo", "type", "pwd", "exit"]);
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum BuiltinCommand {
     Echo(String),
     Type(Vec<Type>),
+    Pwd,
     Exit(i32),
 }
 
@@ -38,6 +39,13 @@ impl BuiltinCommand {
                 }
 
                 BuiltinCommand::Type(args.iter().map(|arg| Type::parse(arg)).collect())
+            }
+            "pwd" => {
+                if !args.is_empty() {
+                    return Err(ParseCommandError::MoreArgs(command, args, 0).into());
+                }
+
+                BuiltinCommand::Pwd
             }
             "exit" => {
                 if args.len() > 1 {
@@ -62,6 +70,12 @@ impl Execute for BuiltinCommand {
                     println!("{}", ty)
                 }
             }
+            BuiltinCommand::Pwd => println!(
+                "{}",
+                env::current_dir()
+                    .map_or(PathBuf::from("invalid directory"), |path| path)
+                    .display()
+            ),
             BuiltinCommand::Exit(exit_code) => std::process::exit(*exit_code),
         }
     }
@@ -93,7 +107,7 @@ impl Display for Type {
             Type::BuiltinCommand(cmd) => write!(f, "{} is a shell builtin", cmd),
             #[allow(unused_variables)]
             Type::Executable(Executable { name, path, args }) => {
-                write!(f, "{} is {}", name, path.to_string_lossy())
+                write!(f, "{} is {}", name, path.display())
             }
             Type::UnrecognizedCommand(cmd) => write!(f, "{}: not found", cmd),
         }
