@@ -16,8 +16,21 @@ fn parse_input() -> Result<(String, Vec<String>)> {
     let mut input = String::new();
     io::stdin().read_line(&mut input)?;
 
-    let cmd_vec: Vec<String> = input.trim().split(' ').map(|s| s.to_string()).collect();
-
+    let mut in_single_quote = false;
+    let mut new_token = String::new();
+    let mut cmd_vec: Vec<String> = vec![];
+    for c in input.chars() {
+        if c == '\'' {
+            in_single_quote = !in_single_quote;
+        } else if c.is_whitespace() && !in_single_quote {
+            if !new_token.is_empty() {
+                cmd_vec.push(new_token.clone());
+                new_token.clear();
+            }
+        } else {
+            new_token.push(c);
+        }
+    }
     if !cmd_vec.is_empty() {
         Ok((cmd_vec[0].clone(), cmd_vec[1..].to_vec()))
     } else {
