@@ -10,7 +10,7 @@ use crate::{
 
 lazy_static! {
     pub static ref BUILTIN_COMMANDS: HashSet<&'static str> =
-        HashSet::from(["echo", "type", "pwd", "exit"]);
+        HashSet::from(["echo", "type", "pwd", "cd", "exit"]);
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -18,6 +18,7 @@ pub enum BuiltinCommand {
     Echo(String),
     Type(Vec<Type>),
     Pwd,
+    Cd(String),
     Exit(i32),
 }
 
@@ -47,6 +48,18 @@ impl BuiltinCommand {
 
                 BuiltinCommand::Pwd
             }
+            "cd" => {
+                if args.len() > 1 {
+                    return Err(ParseCommandError::MoreArgs(command, args, 1).into());
+                }
+
+                let target_dir = if !args.is_empty() {
+                    args[0].to_string()
+                } else {
+                    "~".to_string()
+                };
+                BuiltinCommand::Cd(target_dir)
+            }
             "exit" => {
                 if args.len() > 1 {
                     return Err(ParseCommandError::MoreArgs(command, args, 1).into());
@@ -73,9 +86,26 @@ impl Execute for BuiltinCommand {
             BuiltinCommand::Pwd => println!(
                 "{}",
                 env::current_dir()
-                    .map_or(PathBuf::from("invalid directory"), |path| path)
+                    .unwrap_or(PathBuf::from("invalid directory"))
                     .display()
             ),
+            BuiltinCommand::Cd(target_dir) => {
+                let mut paths: Vec<String> = PathBuf::from(target_dir)
+                    .components()
+                    .map(|p| p.as_os_str().to_string_lossy().to_string())
+                    .collect();
+                //TODO 是否需要检查 paths.is_empty()
+                if paths[0] == "~" {
+                    paths[0] = env::home_dir()
+                        .map_or("".to_string(), |path| path.to_string_lossy().to_string());
+                }
+                let target_dir: PathBuf = paths.iter().collect();
+                if target_dir.is_dir() {
+                    env::set_current_dir(target_dir).expect("Failed to change directory");
+                } else {
+                    println!("cd: {}: No such file or directory", target_dir.display());
+                }
+            }
             BuiltinCommand::Exit(exit_code) => std::process::exit(*exit_code),
         }
     }
