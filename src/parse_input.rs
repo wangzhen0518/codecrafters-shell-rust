@@ -80,12 +80,22 @@ fn read_double_quote(buf: &[char], start_pos: usize) -> (ReadState, String, usiz
         return (ReadState::NeedNewLine, String::new(), 0);
     }
 
+    let mut token = String::new();
     let mut end_pos = start_pos + 1;
     while end_pos < buf.len() && buf[end_pos] != '"' {
-        end_pos += 1;
+        if buf[end_pos] == '\\' {
+            let (read_state, part_token, num) = read_backslash(buf, end_pos, true);
+            token.push_str(&part_token);
+            end_pos += num;
+            if let ReadState::NeedNewLine = read_state {
+                return (read_state, token, end_pos);
+            }
+        } else {
+            token.push(buf[end_pos]);
+            end_pos += 1;
+        }
     }
 
-    let token = buf[start_pos + 1..end_pos].iter().collect();
     let (read_state, num) = if end_pos < buf.len() && buf[end_pos] == '"' {
         let num = end_pos - start_pos + 1; // +1 是跳过最后的 '"'
         let read_state = if end_pos + 1 >= buf.len() || buf[end_pos + 1].is_whitespace() {
@@ -100,6 +110,39 @@ fn read_double_quote(buf: &[char], start_pos: usize) -> (ReadState, String, usiz
     };
 
     (read_state, token, num)
+}
+
+fn escape_special_char(c: char) -> String {
+    match c {
+        '\\' => "\\".to_string(),
+        ' ' => " ".to_string(),
+        '"' => "\"".to_string(),
+        _ => String::from_iter(&['\\', c]),
+    }
+}
+
+fn read_backslash(
+    buf: &[char],
+    start_pos: usize,
+    in_double_quote: bool,
+) -> (ReadState, String, usize) {
+    if start_pos + 1 == buf.len() || buf[start_pos + 1] == '\n' {
+        return (ReadState::NeedNewLine, String::new(), 0);
+    }
+
+    let token = if !in_double_quote {
+        String::from(buf[start_pos + 1])
+    } else {
+        escape_special_char(buf[start_pos + 1])
+    };
+
+    let read_state = if start_pos + 2 == buf.len() || buf[start_pos + 2].is_whitespace() {
+        ReadState::Finish
+    } else {
+        ReadState::Continue
+    };
+
+    (read_state, token, 2)
 }
 
 fn parse_input_from_reader<R: BufRead>(reader: &mut R) -> Result<Vec<String>> {
@@ -118,6 +161,8 @@ fn parse_input_from_reader<R: BufRead>(reader: &mut R) -> Result<Vec<String>> {
             read_single_quote(&buf, current_pos)
         } else if c == '"' {
             read_double_quote(&buf, current_pos)
+        } else if c == '\\' {
+            read_backslash(&buf, current_pos, false)
         } else {
             read_native(&buf, current_pos)
         };
@@ -206,6 +251,36 @@ mod tests {
         test_parse(
             "cat \"/tmp/file name\" \"/tmp/'file name' with spaces\"",
             &["cat", "/tmp/file name", "/tmp/'file name' with spaces"],
+        );
+    }
+
+    #[test]
+    fn test_parse_backslash() {
+        assert_eq!("'", "\'");
+        test_parse(
+            "echo world\\ \\ \\ \\ \\ \\ script",
+            &["echo", "world      script"],
+        );
+        test_parse("echo before\\ after", &["echo", "before after"]);
+        test_parse("echo test\\nexample", &["echo", "testnexample"]);
+        test_parse("echo hello\\\\world", &["echo", "hello\\world"]);
+        test_parse("echo \\'hello\\'", &["echo", "'hello'"]);
+        test_parse(
+            "echo \\'\\\"hello world\\\"\\'",
+            &["echo", "'\"hello", "world\"'"],
+        );
+        test_parse(
+            "echo \"/tmp/pig/f\\n56\" \"/tmp/pig/f\\90\" \"/tmp/pig/f'\\'83\"",
+            &[
+                "echo",
+                "/tmp/pig/f\\n56",
+                "/tmp/pig/f\\90",
+                "/tmp/pig/f'\\'83",
+            ],
+        );
+        test_parse(
+            "cat \"/tmp/file\\\\name\" \"/tmp/file\\ name\"",
+            &["cat", "/tmp/file\\name", "/tmp/file name"],
         );
     }
 }
