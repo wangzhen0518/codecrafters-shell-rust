@@ -1,21 +1,8 @@
-use std::{env, path::PathBuf};
+use std::{env, path::PathBuf, process};
 
 use is_executable::IsExecutable;
 
-use crate::command::Args;
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct Executable {
-    pub name: String,
-    pub path: PathBuf,
-    pub args: Args,
-}
-
-impl Executable {
-    pub fn new(name: String, path: PathBuf, args: Args) -> Self {
-        Self { name, path, args }
-    }
-}
+use crate::command::{Args, Execute};
 
 pub fn load_path_var() -> String {
     env::var("PATH").expect("Invalid $PATH")
@@ -40,6 +27,30 @@ pub fn find_in_path(executable: &str) -> Option<PathBuf> {
         }
     }
     None
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct Executable {
+    pub name: String,
+    pub path: PathBuf,
+    pub args: Args,
+}
+
+impl Executable {
+    pub fn new(name: String, path: PathBuf, args: Args) -> Self {
+        Self { name, path, args }
+    }
+}
+
+impl Execute for Executable {
+    fn execute(&self) {
+        process::Command::new(&self.name)
+            .args(&self.args)
+            .spawn()
+            .expect("Executable failed to start.")
+            .wait()
+            .expect("Executable failed to execute.");
+    }
 }
 
 #[cfg(test)]

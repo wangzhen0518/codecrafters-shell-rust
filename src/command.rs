@@ -2,6 +2,7 @@ use std::fmt::Display;
 
 use crate::{
     builtin::{BuiltinCommand, BUILTIN_COMMANDS},
+    executable::{find_in_path, Executable},
     Result,
 };
 
@@ -17,11 +18,9 @@ pub type Args = Vec<String>;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Command {
-    // TODO 修改逻辑 判断是否是 builtin -> 是 -> 解析 builtin 并执行
-    // TODO 否 -> PATH 中寻找可执行文件 -> 找到，执行可执行文件
-    // TODO                             -> 未找到，报错无效命令
     Empty,
     BuiltinCommand(BuiltinCommand),
+    Executable(Executable),
     Unknown(UnknownCommand),
 }
 
@@ -33,9 +32,10 @@ impl Command {
             Command::Empty
         } else if BUILTIN_COMMANDS.contains(command.as_str()) {
             Command::BuiltinCommand(BuiltinCommand::parse(command, args)?)
+        } else if let Some(exec_path) = find_in_path(&command) {
+            Command::Executable(Executable::new(command, exec_path, args))
         } else {
             Command::Unknown(UnknownCommand::new(command, args))
-            // unimplemented!() //TODO
         };
         Ok(command)
     }
@@ -46,6 +46,7 @@ impl Execute for Command {
         match self {
             Command::Empty => {}
             Command::BuiltinCommand(builtin_command) => builtin_command.execute(),
+            Command::Executable(exec) => exec.execute(),
             Command::Unknown(unknown_command) => {
                 println!("{}: command not found", unknown_command.command)
             }
