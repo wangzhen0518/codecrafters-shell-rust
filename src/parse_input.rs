@@ -1,23 +1,27 @@
-use std::{
-    collections::HashSet,
-    io::{stdin, BufRead},
-};
+use std::{collections::HashSet, io};
 
 use lazy_static::lazy_static;
 
-use crate::Result;
+use crate::{
+    command::{Command, Parse},
+    redirect::Writer,
+    Result,
+};
 
 lazy_static! {
-    static ref SPECIAL_CHARS: HashSet<char> = HashSet::from_iter(['\'', '"', '\\']);
+    static ref SPECIAL_CHARS: HashSet<char> = HashSet::from(['\'', '"', '\\']);
+    static ref TOKEN_END_CHARS: HashSet<char> = HashSet::from(['&', '|', ';']);
+    static ref COMMAND_END_TOKENS: HashSet<&'static str> =
+        HashSet::from(["&", "&&", "|", "||", ";"]);
 }
 
-enum ReadState {
+enum ReadStatus {
     Finish,      // 当前 token 已结束
     Continue,    // 当前 token 未结束，当前 buffer 还有剩余内容
     NeedNewLine, // 当前 token 未结束，但当前 buffer 无剩余内容，需要读取下一行
 }
 
-fn read_native(buf: &[char], start_pos: usize) -> (ReadState, String, usize) {
+fn read_native(buf: &[char], start_pos: usize) -> (ReadStatus, String, usize) {
     let mut token_start_pos = start_pos;
     while token_start_pos < buf.len() && buf[token_start_pos].is_whitespace() {
         token_start_pos += 1;
@@ -27,6 +31,7 @@ fn read_native(buf: &[char], start_pos: usize) -> (ReadState, String, usize) {
     while token_end_pos < buf.len()
         && !buf[token_end_pos].is_whitespace()
         && !SPECIAL_CHARS.contains(&buf[token_end_pos])
+        && !TOKEN_END_CHARS.contains(&buf[token_end_pos])
     {
         token_end_pos += 1;
     }
@@ -35,22 +40,22 @@ fn read_native(buf: &[char], start_pos: usize) -> (ReadState, String, usize) {
 
     let (read_state, num) =
         if token_end_pos < buf.len() && SPECIAL_CHARS.contains(&buf[token_end_pos]) {
-            (ReadState::Continue, token_end_pos - start_pos)
+            (ReadStatus::Continue, token_end_pos - start_pos)
         } else {
             let mut end_pos = token_end_pos;
             while end_pos < buf.len() && buf[end_pos].is_whitespace() {
                 end_pos += 1;
             }
 
-            (ReadState::Finish, end_pos - start_pos)
+            (ReadStatus::Finish, end_pos - start_pos)
         };
 
     (read_state, token, num)
 }
 
-fn read_single_quote(buf: &[char], start_pos: usize) -> (ReadState, String, usize) {
+fn read_single_quote(buf: &[char], start_pos: usize) -> (ReadStatus, String, usize) {
     if start_pos + 1 == buf.len() {
-        return (ReadState::NeedNewLine, String::new(), 0);
+        return (ReadStatus::NeedNewLine, String::new(), 0);
     }
 
     let mut end_pos = start_pos + 1;
@@ -63,21 +68,21 @@ fn read_single_quote(buf: &[char], start_pos: usize) -> (ReadState, String, usiz
         let num = end_pos - start_pos + 1; // +1 是跳过最后的 '\''
         let read_state = if end_pos + 1 >= buf.len() || buf[end_pos + 1].is_whitespace() {
             // 已经到 buffer 末尾，或者 '\'' 的下一个字符是空白字符，那么当前 token 已结束
-            ReadState::Finish
+            ReadStatus::Finish
         } else {
-            ReadState::Continue
+            ReadStatus::Continue
         };
         (read_state, num)
     } else {
-        (ReadState::NeedNewLine, end_pos - start_pos)
+        (ReadStatus::NeedNewLine, end_pos - start_pos)
     };
 
     (read_state, token, num)
 }
 
-fn read_double_quote(buf: &[char], start_pos: usize) -> (ReadState, String, usize) {
+fn read_double_quote(buf: &[char], start_pos: usize) -> (ReadStatus, String, usize) {
     if start_pos + 1 == buf.len() {
-        return (ReadState::NeedNewLine, String::new(), 0);
+        return (ReadStatus::NeedNewLine, String::new(), 0);
     }
 
     let mut token = String::new();
@@ -87,7 +92,7 @@ fn read_double_quote(buf: &[char], start_pos: usize) -> (ReadState, String, usiz
             let (read_state, part_token, num) = read_backslash(buf, end_pos, true);
             token.push_str(&part_token);
             end_pos += num;
-            if let ReadState::NeedNewLine = read_state {
+            if let ReadStatus::NeedNewLine = read_state {
                 return (read_state, token, end_pos);
             }
         } else {
@@ -100,13 +105,13 @@ fn read_double_quote(buf: &[char], start_pos: usize) -> (ReadState, String, usiz
         let num = end_pos - start_pos + 1; // +1 是跳过最后的 '"'
         let read_state = if end_pos + 1 >= buf.len() || buf[end_pos + 1].is_whitespace() {
             // 已经到 buffer 末尾，或者 '"' 的下一个字符是空白字符，那么当前 token 已结束
-            ReadState::Finish
+            ReadStatus::Finish
         } else {
-            ReadState::Continue
+            ReadStatus::Continue
         };
         (read_state, num)
     } else {
-        (ReadState::NeedNewLine, end_pos - start_pos)
+        (ReadStatus::NeedNewLine, end_pos - start_pos)
     };
 
     (read_state, token, num)
@@ -125,9 +130,9 @@ fn read_backslash(
     buf: &[char],
     start_pos: usize,
     in_double_quote: bool,
-) -> (ReadState, String, usize) {
-    if start_pos + 1 == buf.len() || buf[start_pos + 1] == '\n' {
-        return (ReadState::NeedNewLine, String::new(), 0);
+) -> (ReadStatus, String, usize) {
+    if start_pos + 1 == buf.len() {
+        return (ReadStatus::NeedNewLine, String::new(), 0);
     }
 
     let token = if !in_double_quote {
@@ -137,18 +142,18 @@ fn read_backslash(
     };
 
     let read_state = if start_pos + 2 == buf.len() || buf[start_pos + 2].is_whitespace() {
-        ReadState::Finish
+        ReadStatus::Finish
     } else {
-        ReadState::Continue
+        ReadStatus::Continue
     };
 
     (read_state, token, 2)
 }
 
-fn parse_input_from_reader<R: BufRead>(reader: &mut R) -> Result<Vec<String>> {
+fn parse_input_from_reader<R: io::BufRead>(reader: &mut R) -> Result<Vec<String>> {
     let mut input = String::new();
     reader.read_line(&mut input)?;
-    let mut buf: Vec<char> = input.chars().collect();
+    let mut buf: Vec<char> = input.trim().chars().collect();
 
     let mut current_pos = 0;
     let mut new_token = String::new();
@@ -157,14 +162,14 @@ fn parse_input_from_reader<R: BufRead>(reader: &mut R) -> Result<Vec<String>> {
     while current_pos < buf.len() {
         let c = buf[current_pos];
 
-        let (read_state, part_token, num) = if c == '\'' {
-            read_single_quote(&buf, current_pos)
-        } else if c == '"' {
-            read_double_quote(&buf, current_pos)
-        } else if c == '\\' {
-            read_backslash(&buf, current_pos, false)
-        } else {
-            read_native(&buf, current_pos)
+        let (read_state, part_token, num) = match c {
+            '\'' => read_single_quote(&buf, current_pos),
+            '"' => read_double_quote(&buf, current_pos),
+            '\\' => read_backslash(&buf, current_pos, false),
+            //TODO 1. '|' 需要考虑等待下一行的情况
+            //TODO 2. 增加对 "&&" 和 "||" 的支持
+            '&' | ';' | '|' => (ReadStatus::Finish, c.to_string(), 1),
+            _ => read_native(&buf, current_pos),
         };
 
         if !part_token.is_empty() {
@@ -176,14 +181,14 @@ fn parse_input_from_reader<R: BufRead>(reader: &mut R) -> Result<Vec<String>> {
         }
         current_pos += num;
         match read_state {
-            ReadState::Finish => {
+            ReadStatus::Finish => {
                 if !new_token.is_empty() {
                     cmd_vec.push(new_token.clone());
                     new_token.clear();
                 }
             }
-            ReadState::Continue => {}
-            ReadState::NeedNewLine => {
+            ReadStatus::Continue => {}
+            ReadStatus::NeedNewLine => {
                 input.clear();
                 reader.read_line(&mut input)?;
                 buf = input.chars().collect();

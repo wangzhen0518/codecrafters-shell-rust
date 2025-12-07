@@ -1,8 +1,12 @@
-use std::{env, io::Write, path::PathBuf, process};
+use std::{env, path::PathBuf, process};
 
 use is_executable::IsExecutable;
 
-use crate::command::{Args, Execute, Parse};
+use crate::{
+    builtin::ExitCode,
+    command::{Args, Execute, Parse},
+    redirect::Writer,
+};
 
 pub fn load_path_var() -> String {
     env::var("PATH").expect("Invalid $PATH")
@@ -43,7 +47,7 @@ impl Executable {
 }
 
 impl Parse for Executable {
-    fn parse(command: &str, args: &[&str]) -> crate::Result<Self>
+    fn parse(command: &str, args: &[String]) -> crate::Result<Self>
     where
         Self: std::marker::Sized,
     {
@@ -51,7 +55,7 @@ impl Parse for Executable {
             Ok(Executable::new(
                 command.to_string(),
                 exec_path,
-                args.iter().map(|arg| arg.to_string()).collect(),
+                args.to_vec(),
             ))
         } else {
             Err("Cannot find executable".into())
@@ -60,12 +64,7 @@ impl Parse for Executable {
 }
 
 impl Execute for Executable {
-    fn execute<O, E>(&self, output_writer: O, error_writer: E) -> crate::builtin::ExitCode
-    where
-        O: Write,
-        E: Write,
-        process::Stdio: From<O> + From<E>,
-    {
+    fn execute(&self, output_writer: Writer, error_writer: Writer) -> ExitCode {
         if let Ok(mut child) = process::Command::new(&self.name)
             .args(&self.args)
             .stdout(process::Stdio::from(output_writer))

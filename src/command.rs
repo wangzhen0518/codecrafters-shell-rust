@@ -1,21 +1,18 @@
-use std::{fmt::Display, io::Write, process};
+use std::{fmt::Display, io::Write};
 
 use crate::{
     builtin::{BuiltinCommand, ExitCode, BUILTIN_COMMANDS},
     executable::Executable,
+    redirect::Writer,
     Result,
 };
 
 pub trait Execute {
-    fn execute<O, E>(&self, output_writer: O, error_writer: E) -> ExitCode
-    where
-        O: Write,
-        E: Write,
-        process::Stdio: From<O> + From<E>;
+    fn execute(&self, output_writer: Writer, error_writer: Writer) -> ExitCode;
 }
 
 pub trait Parse {
-    fn parse(command: &str, args: &[&str]) -> Result<Self>
+    fn parse(command: &str, args: &[String]) -> Result<Self>
     where
         Self: std::marker::Sized;
 }
@@ -31,7 +28,7 @@ pub enum Command {
 }
 
 impl Parse for Command {
-    fn parse(command: &str, args: &[&str]) -> Result<Self>
+    fn parse(command: &str, args: &[String]) -> Result<Self>
     where
         Self: std::marker::Sized,
     {
@@ -42,22 +39,14 @@ impl Parse for Command {
         } else if let Ok(exec) = Executable::parse(command, args) {
             Command::Executable(exec)
         } else {
-            Command::Unknown(UnknownCommand::new(
-                command.to_string(),
-                args.iter().map(|arg| arg.to_string()).collect(),
-            ))
+            Command::Unknown(UnknownCommand::new(command.to_string(), args.to_vec()))
         };
         Ok(command)
     }
 }
 
 impl Execute for Command {
-    fn execute<O, E>(&self, output_writer: O, mut error_writer: E) -> ExitCode
-    where
-        O: Write,
-        E: Write,
-        process::Stdio: From<O> + From<E>,
-    {
+    fn execute(&self, output_writer: Writer, mut error_writer: Writer) -> ExitCode {
         match self {
             Command::Empty => 0,
             Command::BuiltinCommand(builtin_command) => {
@@ -117,7 +106,11 @@ mod tests {
     #[test]
     fn test_parse_unknown() {
         assert_eq!(
-            Command::parse("invalid_command", &["invalid", "args"]).unwrap(),
+            Command::parse(
+                "invalid_command",
+                &["invalid".to_string(), "args".to_string()]
+            )
+            .unwrap(),
             Command::Unknown(UnknownCommand::new(
                 "invalid_command".to_string(),
                 vec!["invalid".to_string(), "args".to_string()]
@@ -132,7 +125,7 @@ mod tests {
             Command::BuiltinCommand(BuiltinCommand::Exit(0))
         );
         assert_eq!(
-            Command::parse("exit", &["123"]).unwrap(),
+            Command::parse("exit", &["123".to_string()]).unwrap(),
             Command::BuiltinCommand(BuiltinCommand::Exit(123))
         );
     }

@@ -2,28 +2,17 @@
 
 use std::io::{self, Write};
 
-use crate::command::{Command, Execute, Parse};
+use crate::{command::Execute, parse_input::CommandExecution};
 
 mod builtin;
 mod command;
 mod executable;
 mod parse_input;
+mod redirect;
 mod utils;
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
 pub type Result<T> = std::result::Result<T, Error>;
-
-fn execute_command(command: &str, args: &[&str]) {
-    match Command::parse(command, args) {
-        Ok(command) => {
-            command.execute(io::stdout(), io::stderr());
-        }
-        Err(err) => eprintln!(
-            "Failed to parse command: \"{}\", args: \"{:?}\", Error: {}",
-            command, args, err
-        ),
-    }
-}
 
 fn main() {
     utils::config_logger();
@@ -33,10 +22,16 @@ fn main() {
         io::stdout().flush().unwrap();
 
         match parse_input::parse_input() {
-            Ok((command, args)) => execute_command(
-                &command,
-                &args.iter().map(|arg| arg.as_str()).collect::<Vec<&str>>(),
-            ),
+            Ok(command_exec_vec) => {
+                for CommandExecution {
+                    command,
+                    output_writer,
+                    error_writer,
+                } in command_exec_vec
+                {
+                    command.execute(output_writer, error_writer);
+                }
+            }
             Err(err) => eprintln!("{}", err),
         }
         io::stdout().flush().unwrap();
