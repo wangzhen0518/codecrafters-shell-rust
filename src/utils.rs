@@ -14,3 +14,7 @@ pub fn config_logger() {
 pub fn set_env_path() {
     unsafe { std::env::set_var("PATH", "/usr/bin:/usr/local/bin:$PATH") };
 }
+
+pub fn vec_str_to_vec_string(s_vec: &[&str]) -> Vec<String> {
+    s_vec.iter().map(|s| s.to_string()).collect()
+}

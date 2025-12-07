@@ -175,7 +175,7 @@ impl Display for Type {
 mod tests {
     use std::{env, path::PathBuf};
 
-    use crate::utils::set_env_path;
+    use crate::utils::{set_env_path, vec_str_to_vec_string};
 
     use super::*;
 
@@ -186,11 +186,7 @@ mod tests {
             BuiltinCommand::Echo("\n".to_string())
         );
         assert_eq!(
-            BuiltinCommand::parse(
-                "echo",
-                &["abc".to_string(), "".to_string(), "123".to_string()]
-            )
-            .unwrap(),
+            BuiltinCommand::parse("echo", &vec_str_to_vec_string(&["abc", "", "123"])).unwrap(),
             BuiltinCommand::Echo("abc  123".to_string())
         );
     }
@@ -212,13 +208,7 @@ mod tests {
         assert_eq!(
             BuiltinCommand::parse(
                 "type",
-                &[
-                    "echo".to_string(),
-                    "type".to_string(),
-                    "exit".to_string(),
-                    "ls".to_string(),
-                    "invalid_command".to_string()
-                ]
+                &vec_str_to_vec_string(&["echo", "type", "exit", "ls", "invalid_command"])
             )
             .unwrap(),
             BuiltinCommand::Type(vec![
