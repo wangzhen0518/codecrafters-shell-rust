@@ -1,4 +1,4 @@
-use std::{env, path::PathBuf, process};
+use std::{env, io::Write, path::PathBuf, process};
 
 use is_executable::IsExecutable;
 
@@ -60,13 +60,26 @@ impl Parse for Executable {
 }
 
 impl Execute for Executable {
-    fn execute(&self) {
-        process::Command::new(&self.name)
+    fn execute<O, E>(&self, output_writer: O, error_writer: E) -> crate::builtin::ExitCode
+    where
+        O: Write,
+        E: Write,
+        process::Stdio: From<O> + From<E>,
+    {
+        if let Ok(mut child) = process::Command::new(&self.name)
             .args(&self.args)
+            .stdout(process::Stdio::from(output_writer))
+            .stderr(process::Stdio::from(error_writer))
             .spawn()
-            .expect("Executable failed to start.")
-            .wait()
-            .expect("Executable failed to execute.");
+        {
+            if let Ok(exit_status) = child.wait() {
+                exit_status.code().unwrap_or(-1)
+            } else {
+                -1
+            }
+        } else {
+            -1
+        }
     }
 }
 

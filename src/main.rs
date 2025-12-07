@@ -15,12 +15,12 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 fn execute_command(command: &str, args: &[&str]) {
     match Command::parse(command, args) {
-        Ok(command) => command.execute(),
-        Err(err) => tracing::error!(
+        Ok(command) => {
+            command.execute(io::stdout(), io::stderr());
+        }
+        Err(err) => eprintln!(
             "Failed to parse command: \"{}\", args: \"{:?}\", Error: {}",
-            command,
-            args,
-            err
+            command, args, err
         ),
     }
 }
@@ -37,7 +37,7 @@ fn main() {
                 &command,
                 &args.iter().map(|arg| arg.as_str()).collect::<Vec<&str>>(),
             ),
-            Err(err) => tracing::error!(err),
+            Err(err) => eprintln!("{}", err),
         }
         io::stdout().flush().unwrap();
     }

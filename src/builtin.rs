@@ -13,13 +13,15 @@ lazy_static! {
         HashSet::from(["echo", "type", "pwd", "cd", "exit"]);
 }
 
+pub type ExitCode = i32;
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum BuiltinCommand {
     Echo(String),
     Type(Vec<Type>),
     Pwd,
     Cd(String),
-    Exit(i32),
+    Exit(ExitCode),
 }
 
 impl Parse for BuiltinCommand {
@@ -88,7 +90,7 @@ impl Parse for BuiltinCommand {
                     .into());
                 }
 
-                let exit_code: i32 = if args.is_empty() { 0 } else { args[0].parse()? };
+                let exit_code = if args.is_empty() { 0 } else { args[0].parse()? };
                 BuiltinCommand::Exit(exit_code)
             }
             _ => unreachable!(),
@@ -98,20 +100,32 @@ impl Parse for BuiltinCommand {
 }
 
 impl Execute for BuiltinCommand {
-    fn execute(&self) {
+    fn execute<O, E>(&self, mut output_writer: O, mut error_writer: E) -> ExitCode
+    where
+        O: std::io::Write,
+        E: std::io::Write,
+        std::process::Stdio: From<O> + From<E>,
+    {
         match self {
-            BuiltinCommand::Echo(content) => println!("{}", content),
+            BuiltinCommand::Echo(content) => {
+                -(writeln!(output_writer, "{}", content).is_err() as ExitCode)
+            }
             BuiltinCommand::Type(types) => {
                 for ty in types {
-                    println!("{}", ty)
+                    if writeln!(output_writer, "{}", ty).is_err() {
+                        return -1;
+                    }
+                }
+                0
+            }
+            BuiltinCommand::Pwd => {
+                if let Ok(pwd) = env::current_dir() {
+                    -(writeln!(output_writer, "{}", pwd.display()).is_err() as ExitCode)
+                } else {
+                    let _ = writeln!(error_writer, "invalid directory");
+                    -1
                 }
             }
-            BuiltinCommand::Pwd => println!(
-                "{}",
-                env::current_dir()
-                    .unwrap_or(PathBuf::from("invalid directory"))
-                    .display()
-            ),
             BuiltinCommand::Cd(target_dir) => {
                 let mut paths: Vec<String> = PathBuf::from(target_dir)
                     .components()
@@ -123,10 +137,15 @@ impl Execute for BuiltinCommand {
                         .map_or("".to_string(), |path| path.to_string_lossy().to_string());
                 }
                 let target_dir: PathBuf = paths.iter().collect();
-                if target_dir.is_dir() {
-                    env::set_current_dir(target_dir).expect("Failed to change directory");
+                if env::set_current_dir(&target_dir).is_err() {
+                    let _ = writeln!(
+                        error_writer,
+                        "cd: {}: No such file or directory",
+                        target_dir.display()
+                    );
+                    -1
                 } else {
-                    println!("cd: {}: No such file or directory", target_dir.display());
+                    0
                 }
             }
             BuiltinCommand::Exit(exit_code) => std::process::exit(*exit_code),
