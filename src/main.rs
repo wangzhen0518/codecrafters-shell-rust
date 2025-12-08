@@ -9,6 +9,7 @@ mod command;
 mod executable;
 mod parse_input;
 mod redirect;
+mod trie;
 mod utils;
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
