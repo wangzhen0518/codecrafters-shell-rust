@@ -186,7 +186,11 @@ mod tests {
             BuiltinCommand::Echo("\n".to_string())
         );
         assert_eq!(
-            BuiltinCommand::parse("echo", &vec_str_to_vec_string(&["abc", "", "123"])).unwrap(),
+            BuiltinCommand::parse(
+                "echo",
+                &vec_str_to_vec_string::<Vec<_>>(&["abc", "", "123"])
+            )
+            .unwrap(),
             BuiltinCommand::Echo("abc  123".to_string())
         );
     }
@@ -208,7 +212,13 @@ mod tests {
         assert_eq!(
             BuiltinCommand::parse(
                 "type",
-                &vec_str_to_vec_string(&["echo", "type", "exit", "ls", "invalid_command"])
+                &vec_str_to_vec_string::<Vec<_>>(&[
+                    "echo",
+                    "type",
+                    "exit",
+                    "ls",
+                    "invalid_command"
+                ])
             )
             .unwrap(),
             BuiltinCommand::Type(vec![

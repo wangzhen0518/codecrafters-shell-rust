@@ -347,6 +347,7 @@ mod tests {
     use super::*;
 
     fn get_parsed_tokens(input: &str) -> Vec<String> {
+        //TODO 修改为 mock reader
         parse_string(&mut Cursor::new(input.as_bytes())).unwrap()
     }
 
@@ -354,7 +355,7 @@ mod tests {
     fn test_parse_native() {
         assert_eq!(
             get_parsed_tokens("echo shell   hello"),
-            vec_str_to_vec_string(&["echo", "shell", "hello"])
+            vec_str_to_vec_string::<Vec<_>>(&["echo", "shell", "hello"])
         );
     }
 
@@ -362,19 +363,23 @@ mod tests {
     fn test_parse_single_quote() {
         assert_eq!(
             get_parsed_tokens("echo 'shell   hello'"),
-            vec_str_to_vec_string(&["echo", "shell   hello"])
+            vec_str_to_vec_string::<Vec<_>>(&["echo", "shell   hello"])
         );
         assert_eq!(
             get_parsed_tokens("echo 'shell''hello'"),
-            vec_str_to_vec_string(&["echo", "shellhello"])
+            vec_str_to_vec_string::<Vec<_>>(&["echo", "shellhello"])
         );
         assert_eq!(
             get_parsed_tokens("echo shell''hello"),
-            vec_str_to_vec_string(&["echo", "shellhello"])
+            vec_str_to_vec_string::<Vec<_>>(&["echo", "shellhello"])
         );
         assert_eq!(
             get_parsed_tokens("cat '/tmp/file name' '/tmp/file name with spaces'"),
-            vec_str_to_vec_string(&["cat", "/tmp/file name", "/tmp/file name with spaces"])
+            vec_str_to_vec_string::<Vec<_>>(&[
+                "cat",
+                "/tmp/file name",
+                "/tmp/file name with spaces"
+            ])
         );
     }
 
@@ -382,23 +387,27 @@ mod tests {
     fn test_parse_native_double_quote() {
         assert_eq!(
             get_parsed_tokens("echo \"shell   hello\""),
-            vec_str_to_vec_string(&["echo", "shell   hello"])
+            vec_str_to_vec_string::<Vec<_>>(&["echo", "shell   hello"])
         );
         assert_eq!(
             get_parsed_tokens("echo \"shell\"\"hello\""),
-            vec_str_to_vec_string(&["echo", "shellhello"])
+            vec_str_to_vec_string::<Vec<_>>(&["echo", "shellhello"])
         );
         assert_eq!(
             get_parsed_tokens("echo shell\"\"hello"),
-            vec_str_to_vec_string(&["echo", "shellhello"])
+            vec_str_to_vec_string::<Vec<_>>(&["echo", "shellhello"])
         );
         assert_eq!(
             get_parsed_tokens("echo \"shell's test\""),
-            vec_str_to_vec_string(&["echo", "shell's test"])
+            vec_str_to_vec_string::<Vec<_>>(&["echo", "shell's test"])
         );
         assert_eq!(
             get_parsed_tokens("cat \"/tmp/file name\" \"/tmp/'file name' with spaces\""),
-            vec_str_to_vec_string(&["cat", "/tmp/file name", "/tmp/'file name' with spaces"])
+            vec_str_to_vec_string::<Vec<_>>(&[
+                "cat",
+                "/tmp/file name",
+                "/tmp/'file name' with spaces"
+            ])
         );
     }
 
@@ -406,31 +415,31 @@ mod tests {
     fn test_parse_backslash() {
         assert_eq!(
             get_parsed_tokens("echo world\\ \\ \\ \\ \\ \\ script"),
-            vec_str_to_vec_string(&["echo", "world      script"])
+            vec_str_to_vec_string::<Vec<_>>(&["echo", "world      script"])
         );
         assert_eq!(
             get_parsed_tokens("echo before\\ after"),
-            vec_str_to_vec_string(&["echo", "before after"])
+            vec_str_to_vec_string::<Vec<_>>(&["echo", "before after"])
         );
         assert_eq!(
             get_parsed_tokens("echo test\\nexample"),
-            vec_str_to_vec_string(&["echo", "testnexample"])
+            vec_str_to_vec_string::<Vec<_>>(&["echo", "testnexample"])
         );
         assert_eq!(
             get_parsed_tokens("echo hello\\\\world"),
-            vec_str_to_vec_string(&["echo", "hello\\world"])
+            vec_str_to_vec_string::<Vec<_>>(&["echo", "hello\\world"])
         );
         assert_eq!(
             get_parsed_tokens("echo \\'hello\\'"),
-            vec_str_to_vec_string(&["echo", "'hello'"])
+            vec_str_to_vec_string::<Vec<_>>(&["echo", "'hello'"])
         );
         assert_eq!(
             get_parsed_tokens("echo \\'\\\"hello world\\\"\\'"),
-            vec_str_to_vec_string(&["echo", "'\"hello", "world\"'"])
+            vec_str_to_vec_string::<Vec<_>>(&["echo", "'\"hello", "world\"'"])
         );
         assert_eq!(
             get_parsed_tokens("echo \"/tmp/pig/f\\n56\" \"/tmp/pig/f\\90\" \"/tmp/pig/f'\\'83\""),
-            vec_str_to_vec_string(&[
+            vec_str_to_vec_string::<Vec<_>>(&[
                 "echo",
                 "/tmp/pig/f\\n56",
                 "/tmp/pig/f\\90",
@@ -439,7 +448,7 @@ mod tests {
         );
         assert_eq!(
             get_parsed_tokens("cat \"/tmp/file\\\\name\" \"/tmp/file\\ name\""),
-            vec_str_to_vec_string(&["cat", "/tmp/file\\name", "/tmp/file name"])
+            vec_str_to_vec_string::<Vec<_>>(&["cat", "/tmp/file\\name", "/tmp/file name"])
         );
     }
 
