@@ -316,4 +316,39 @@ mod tests {
             ),]))
         );
     }
+
+    #[test]
+    fn test_trie_rs() {
+        let mut builder = trie_rs::TrieBuilder::new();
+        builder.push("abc");
+        builder.push("abd");
+        builder.push("aef");
+        builder.push("hjk");
+        builder.push("hjl");
+        let tree = builder.build();
+        assert_eq!(
+            tree.predictive_search("").collect::<HashSet<String>>(),
+            vec_str_to_vec_string(&["aef", "abd", "abc", "hjk", "hjl"])
+        );
+        assert_eq!(
+            tree.predictive_search("ab").collect::<HashSet<String>>(),
+            vec_str_to_vec_string(&["abd", "abc"])
+        );
+        assert_eq!(
+            tree.predictive_search("abc").collect::<HashSet<String>>(),
+            vec_str_to_vec_string(&["abc"])
+        );
+        assert_eq!(
+            tree.predictive_search("abcd").collect::<HashSet<String>>(),
+            HashSet::new()
+        );
+        assert_eq!(
+            tree.predictive_search("abe").collect::<HashSet<String>>(),
+            HashSet::new()
+        );
+        assert_eq!(
+            tree.predictive_search("pqr").collect::<HashSet<String>>(),
+            HashSet::new()
+        );
+    }
 }

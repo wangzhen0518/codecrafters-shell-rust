@@ -4,12 +4,12 @@ use std::io::{self, Write};
 
 use crate::{command::Execute, parse_input::CommandExecution};
 
+mod auto_completion;
 mod builtin;
 mod command;
 mod executable;
 mod parse_input;
 mod redirect;
-mod trie;
 mod utils;
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
