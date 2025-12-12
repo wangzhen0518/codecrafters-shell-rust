@@ -4,7 +4,7 @@ use rustyline::{CompletionType, Config, EditMode, Editor};
 
 use crate::{
     command::Execute,
-    parse_input::{CommandExecution, parse_tokens},
+    parser::{CommandExecution, parse_tokens},
     reader::ShellHelper,
     tokenize::tokenize,
 };
@@ -12,7 +12,7 @@ use crate::{
 mod builtin;
 mod command;
 mod executable;
-mod parse_input;
+mod parser;
 mod reader;
 mod redirect;
 mod tokenize;
