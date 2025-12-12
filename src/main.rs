@@ -24,6 +24,7 @@ pub type Error = Box<dyn std::error::Error + Send + Sync>;
 pub type Result<T> = std::result::Result<T, Error>;
 
 static PROMPT: &str = "$ ";
+static HISTORY_FILE: &str = "history.txt";
 
 fn main() {
     utils::config_logger();
@@ -37,7 +38,7 @@ fn main() {
         .build();
     let mut rl = Editor::with_config(config).expect("Failed to build Editor");
     rl.set_helper(Some(helper));
-    let _ = rl.load_history("history.txt");
+    let _ = rl.load_history(HISTORY_FILE);
 
     loop {
         match rl.readline(PROMPT) {
@@ -64,5 +65,5 @@ fn main() {
         }
     }
 
-    let _ = rl.append_history("history.txt");
+    let _ = rl.append_history(HISTORY_FILE);
 }

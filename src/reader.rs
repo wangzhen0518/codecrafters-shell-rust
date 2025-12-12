@@ -1,4 +1,4 @@
-use rustyline::{Completer, Helper, Highlighter, Hinter, Validator};
+use rustyline::{Completer, Helper, Highlighter, Hinter, Validator, hint::HistoryHinter};
 
 use crate::{completer::ShellCompleter, validator::ShellValidator};
 
@@ -10,6 +10,9 @@ pub struct ShellHelper {
 
     #[rustyline(Completer)]
     completer: ShellCompleter,
+
+    #[rustyline(Hinter)]
+    hinter: HistoryHinter,
 }
 
 impl ShellHelper {
@@ -17,6 +20,7 @@ impl ShellHelper {
         Self {
             validator: ShellValidator,
             completer: ShellCompleter,
+            hinter: HistoryHinter::new(),
         }
     }
 }
