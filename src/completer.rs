@@ -3,10 +3,28 @@ use rustyline::completion::Completer;
 use trie_rs::Trie;
 // use radix_trie::Trie;
 
+macro_rules! add_suffix {
+    // 处理数组
+    ([$($str:expr),*], $suffix:expr) => {
+        [$(concat!($str, $suffix)),*]
+    };
+    // 处理切片引用
+    (&[$($str:expr),*], $suffix:expr) => {
+        &[$(concat!($str, $suffix)),*]
+    };
+}
+
 lazy_static! {
-    static ref SUPPORT_COMMANDS: Trie<u8> = Trie::from_iter(["echo ", "type ", "exit ", "pwd ", "cd "]);
+    // static ref SUPPORT_COMMANDS: Trie<u8> =
+    //     Trie::from_iter(["echo ", "type ", "exit ", "pwd ", "cd "]);
+    static ref SUPPORT_COMMANDS: Trie<u8> =
+        Trie::from_iter(add_suffix!(["echo", "type", "exit", "pwd", "cd"], " "));
 }
 // static  SUPPORT_COMMANDS = Trie::from(value);
+
+// const fn add_space<const N: usize>(cmds: [&'static str; N]) -> [&'static str; N] {
+//     cmds.map(|cmd| cmd)
+// }
 
 pub struct ShellCompleter;
 
