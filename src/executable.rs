@@ -12,6 +12,7 @@ pub fn load_path_var() -> String {
     env::var("PATH").expect("Invalid $PATH")
 }
 
+#[allow(unused)]
 pub fn load_env_path() -> Vec<PathBuf> {
     env::split_paths(&load_path_var())
         .filter(|path| path.is_dir())

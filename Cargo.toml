@@ -2,7 +2,7 @@
 name = "codecrafters-shell"
 version = "0.1.0"
 authors = ["Codecrafters <hello@codecrafters.io>"]
-edition = "2021"
+edition = "2024"
 rust-version = "1.87"
 
 [dependencies]
@@ -10,7 +10,9 @@ rust-version = "1.87"
 bytes = "1.11.0"                                  # helps manage buffers
 is_executable = "1.0.5"
 lazy_static = "1.5.0"
+radix_trie = "0.3.0"
 regex = "1.12.2"
+rustyline = { version = "17.0.2", features = ["derive", "with-fuzzy"] }
 # thiserror = "1.0.38"                             # error handling
 tracing = "0.1.43"
 tracing-subscriber = "0.3.22"
