@@ -11,6 +11,7 @@ use crate::{
 
 mod builtin;
 mod command;
+mod completer;
 mod executable;
 mod parser;
 mod reader;
@@ -62,4 +63,6 @@ fn main() {
             }
         }
     }
+
+    let _ = rl.append_history("history.txt");
 }
