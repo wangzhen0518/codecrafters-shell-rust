@@ -1,8 +1,8 @@
-use std::{collections::HashSet, sync::RwLock};
+use std::{borrow::Cow, collections::HashSet, sync::RwLock};
 
 use lazy_static::lazy_static;
 use radix_trie::{Trie, TrieCommon};
-use rustyline::completion::Completer;
+use rustyline::{Changeset, completion::Completer, line_buffer::LineBuffer};
 
 use crate::{
     builtin::BUILTIN_COMMANDS,
@@ -23,9 +23,7 @@ lazy_static! {
             }
         }
 
-        RwLock::new(Trie::from_iter(
-            commands.into_iter().map(|cmd| (cmd + " ", ())),
-        ))
+        RwLock::new(Trie::from_iter(commands.into_iter().map(|cmd| (cmd, ()))))
     };
 }
 
@@ -54,7 +52,7 @@ impl Completer for ShellCompleter {
             for dir in added_paths {
                 for exec in get_executables_from_dir(dir) {
                     if let Some(exec) = exec.file_name().and_then(|basename| basename.to_str()) {
-                        writer.insert(exec.to_string() + " ", ());
+                        writer.insert(exec.to_string(), ());
                     }
                 }
             }
@@ -63,11 +61,26 @@ impl Completer for ShellCompleter {
         //TODO 支持 command, args 区分，支持不同类型的补全
         if let Some(sub_trie) = SUPPORT_COMMANDS.read().unwrap().get_raw_descendant(line) {
             // dbg!(&sub_trie);
-            let candidates = sub_trie.keys().map(|key| key.to_string()).collect();
+
+            // candidates 无需排序，trie 中取出来之后就是按字典序排好序的
+            let candidates: Vec<String> = sub_trie.keys().map(|key| key.to_string()).collect();
             // dbg!(&candidates);
+
             Ok((0, candidates))
         } else {
             Ok((pos, Vec::with_capacity(0)))
         }
+    }
+
+    fn update(&self, line: &mut LineBuffer, start: usize, elected: &str, cl: &mut Changeset) {
+        let end = line.pos();
+        let elected = if let Some(sub_trie) = SUPPORT_COMMANDS.read().unwrap().subtrie(elected)
+            && sub_trie.is_leaf()
+        {
+            Cow::Owned(elected.to_string() + " ")
+        } else {
+            Cow::Borrowed(elected)
+        };
+        line.replace(start..end, &elected, cl);
     }
 }
