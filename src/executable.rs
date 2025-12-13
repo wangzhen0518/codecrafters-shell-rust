@@ -6,7 +6,7 @@ use lazy_static::lazy_static;
 use crate::{
     builtin::ExitCode,
     command::{Args, Execute, Parse},
-    redirect::Writer,
+    redirect::{Reader, Writer},
 };
 
 lazy_static! {
@@ -72,11 +72,12 @@ impl Parse for Executable {
 }
 
 impl Execute for Executable {
-    fn execute(&self, output_writer: Writer, error_writer: Writer) -> ExitCode {
+    fn execute(&self, reader: Reader, output_writer: Writer, error_writer: Writer) -> ExitCode {
         if let Ok(mut child) = process::Command::new(&self.name)
             .args(&self.args)
-            .stdout(process::Stdio::from(output_writer))
-            .stderr(process::Stdio::from(error_writer))
+            .stdin(reader)
+            .stdout(output_writer)
+            .stderr(error_writer)
             .spawn()
         {
             if let Ok(exit_status) = child.wait() {

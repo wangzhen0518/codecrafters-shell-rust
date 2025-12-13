@@ -1,14 +1,14 @@
 use std::{fmt::Display, io::Write};
 
 use crate::{
-    builtin::{BuiltinCommand, ExitCode, BUILTIN_COMMANDS},
-    executable::Executable,
-    redirect::Writer,
     Result,
+    builtin::{BUILTIN_COMMANDS, BuiltinCommand, ExitCode},
+    executable::Executable,
+    redirect::{Reader, Writer},
 };
 
 pub trait Execute {
-    fn execute(&self, output_writer: Writer, error_writer: Writer) -> ExitCode;
+    fn execute(&self, reader: Reader, output_writer: Writer, error_writer: Writer) -> ExitCode;
 }
 
 pub trait Parse {
@@ -46,13 +46,13 @@ impl Parse for Command {
 }
 
 impl Execute for Command {
-    fn execute(&self, output_writer: Writer, mut error_writer: Writer) -> ExitCode {
+    fn execute(&self, reader: Reader, output_writer: Writer, mut error_writer: Writer) -> ExitCode {
         match self {
             Command::Empty => 0,
             Command::BuiltinCommand(builtin_command) => {
-                builtin_command.execute(output_writer, error_writer)
+                builtin_command.execute(reader, output_writer, error_writer)
             }
-            Command::Executable(exec) => exec.execute(output_writer, error_writer),
+            Command::Executable(exec) => exec.execute(reader, output_writer, error_writer),
             Command::Unknown(unknown) => {
                 let _ = writeln!(error_writer, "{}: command not found", unknown.command);
                 0

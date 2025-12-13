@@ -6,7 +6,7 @@ use regex::Regex;
 use crate::{
     Result,
     command::{Command, Parse},
-    redirect::Writer,
+    redirect::{Reader, Writer},
 };
 
 lazy_static! {
@@ -17,16 +17,26 @@ lazy_static! {
 #[derive(Debug)]
 pub struct CommandExecution {
     pub command: Command,
+    pub reader: Reader,
     pub output_writer: Writer,
     pub error_writer: Writer,
+    pub use_pipe: bool,
 }
 
 impl CommandExecution {
-    pub fn new(command: Command, output_writer: Writer, error_writer: Writer) -> Self {
+    pub fn new(
+        command: Command,
+        reader: Reader,
+        output_writer: Writer,
+        error_writer: Writer,
+        use_pipe: bool,
+    ) -> Self {
         Self {
             command,
+            reader,
             output_writer,
             error_writer,
+            use_pipe,
         }
     }
 }
@@ -35,8 +45,10 @@ impl Default for CommandExecution {
     fn default() -> Self {
         Self {
             command: Command::Empty,
+            reader: Reader::Stdin,
             output_writer: io::stdout().into(),
             error_writer: io::stderr().into(),
+            use_pipe: true,
         }
     }
 }
@@ -62,6 +74,7 @@ fn parse_redirect(
     tokens: &[String],
     start_pos: usize,
 ) -> Result<Option<(RedirectIO, Writer, usize)>> {
+    //TODO 支持输入重定向
     if let Some((origin, redirect, new)) = extract_redirect(&tokens[start_pos]) {
         let mut num = 1;
         let redirect_io = match origin {
@@ -70,6 +83,8 @@ fn parse_redirect(
             _ => unreachable!(),
         };
         let writer = match new {
+            // TODO 重定向到 output 或者 error 的 writer，而不是 stdout, stderr
+            // TODO 比如 2>&1 | tee，这里 stdout 也重定向了，那么直接将 stderr 重定向到 io::stdout() 是错误的
             "1" => io::stdout().into(),
             "2" => io::stderr().into(),
             "" => {
@@ -97,6 +112,9 @@ pub fn parse_tokens(tokens: &[String]) -> Result<Vec<CommandExecution>> {
     let mut idx = 0;
     let mut command_exec_vec = vec![];
     let mut current_cmd_args: Vec<String> = vec![];
+
+    let mut reader = None;
+    let mut next_reader = None;
     let mut output_writer = None;
     let mut error_writer = None;
 
@@ -108,15 +126,29 @@ pub fn parse_tokens(tokens: &[String]) -> Result<Vec<CommandExecution>> {
             }
             idx += num;
         } else if COMMAND_END_TOKENS.contains(tokens[idx].as_str()) {
-            // TODO
-            // match tokens[idx] {
-            //     "&"=>{output_writer = process::Stdio::null()}
-            // }
+            let use_pipe = match tokens[idx].as_str() {
+                "&" => todo!(),
+                "|" => {
+                    let (pipe_reader, pipe_writer) = io::pipe()?;
+                    next_reader = Some(Reader::PipeReader(pipe_reader));
+                    output_writer = Some(Writer::PipeWriter(pipe_writer));
+                    false
+                }
+                //TODO 处理 exit code
+                "&&" => todo!(),
+                "||" => todo!(),
+                ";" => true,
+                _ => unreachable!(),
+            };
             command_exec_vec.push(CommandExecution::new(
                 Command::parse(&current_cmd_args[0], &current_cmd_args[1..])?,
+                reader.take().unwrap_or(Reader::Stdin),
                 output_writer.take().unwrap_or(io::stdout().into()),
                 error_writer.take().unwrap_or(io::stderr().into()),
+                use_pipe,
             ));
+
+            reader = next_reader.take();
             current_cmd_args.clear();
             idx += 1;
         } else {
@@ -128,8 +160,10 @@ pub fn parse_tokens(tokens: &[String]) -> Result<Vec<CommandExecution>> {
     if !current_cmd_args.is_empty() {
         command_exec_vec.push(CommandExecution::new(
             Command::parse(&current_cmd_args[0], &current_cmd_args[1..])?,
+            reader.unwrap_or(Reader::Stdin),
             output_writer.unwrap_or(io::stdout().into()),
             error_writer.unwrap_or(io::stderr().into()),
+            true,
         ));
     }
 

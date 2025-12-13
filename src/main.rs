@@ -1,5 +1,7 @@
 // #![allow(dead_code)]
 
+use std::thread;
+
 use rustyline::{CompletionType, Config, EditMode, Editor};
 
 use crate::{
@@ -48,11 +50,21 @@ fn main() {
                     Ok(command_exec_vec) => {
                         for CommandExecution {
                             command,
+                            reader,
                             output_writer,
                             error_writer,
+                            use_pipe,
                         } in command_exec_vec
                         {
-                            command.execute(output_writer, error_writer);
+                            //? 对于 pipe 采用并行运行是否是正确的做法？
+                            if use_pipe {
+                                command.execute(reader, output_writer, error_writer);
+                            } else {
+                                // 不需要单独 join，因为最后一个 pipe 命令是阻塞执行的，所以在不被取消的情况下，会一直等待前面的命令全部执行完才终止
+                                thread::spawn(move || {
+                                    command.execute(reader, output_writer, error_writer)
+                                });
+                            }
                         }
                     }
                     Err(err) => eprintln!("{}", err),

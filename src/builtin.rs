@@ -3,10 +3,10 @@ use std::{collections::HashSet, env, fmt::Display, io::Write, path::PathBuf};
 use lazy_static::lazy_static;
 
 use crate::{
-    command::{Execute, Parse, ParseCommandError},
-    executable::{find_in_path, Executable},
-    redirect::Writer,
     Result,
+    command::{Execute, Parse, ParseCommandError},
+    executable::{Executable, find_in_path},
+    redirect::{Reader, Writer},
 };
 
 lazy_static! {
@@ -89,7 +89,12 @@ impl Parse for BuiltinCommand {
 }
 
 impl Execute for BuiltinCommand {
-    fn execute(&self, mut output_writer: Writer, mut error_writer: Writer) -> ExitCode {
+    fn execute(
+        &self,
+        _reader: Reader,
+        mut output_writer: Writer,
+        mut error_writer: Writer,
+    ) -> ExitCode {
         match self {
             BuiltinCommand::Echo(content) => {
                 -(writeln!(output_writer, "{}", content).is_err() as ExitCode)
