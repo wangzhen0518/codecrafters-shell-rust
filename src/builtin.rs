@@ -21,7 +21,7 @@ pub type ExitCode = i32;
 pub enum BuiltinCommand {
     Echo(String),
     Type(Vec<Type>),
-    History,
+    History(i64),
     Pwd,
     Cd(String),
     Exit(ExitCode),
@@ -52,13 +52,19 @@ impl Parse for BuiltinCommand {
                 BuiltinCommand::Type(args.iter().map(|arg| Type::parse(arg)).collect())
             }
             "history" => {
-                if !args.is_empty() {
+                if args.len() > 1 {
                     return Err(
-                        ParseCommandError::MoreArgs(command.to_string(), args.to_vec(), 0).into(),
+                        ParseCommandError::MoreArgs(command.to_string(), args.to_vec(), 1).into(),
                     );
                 }
 
-                BuiltinCommand::History
+                let n = if args.is_empty() {
+                    -1
+                } else {
+                    args[0].parse()?
+                };
+
+                BuiltinCommand::History(n)
             }
             "pwd" => {
                 if !args.is_empty() {
@@ -118,12 +124,13 @@ impl Execute for BuiltinCommand {
                 }
                 0
             }
-            BuiltinCommand::History => {
+            BuiltinCommand::History(n) => {
                 if let Ok(rl) = RL.lock() {
                     let history = rl.history();
                     let num = history.len();
                     let length = (num as f64).log10() as usize + 1;
-                    for (idx, record) in history.iter().enumerate() {
+                    let n = if *n == -1 { 0 } else { num - *n as usize };
+                    for (idx, record) in history.iter().enumerate().skip(n) {
                         if writeln!(output_writer, "   {:length$}  {}", idx + 1, record).is_err() {
                             return -1;
                         }
