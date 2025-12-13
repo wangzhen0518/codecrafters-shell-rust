@@ -1,13 +1,14 @@
 // #![allow(dead_code)]
 
-use std::thread;
+use std::{sync::Mutex, thread};
 
-use rustyline::{CompletionType, Config, EditMode, Editor};
+use lazy_static::lazy_static;
+use rustyline::{CompletionType, Config, EditMode, Editor, history::FileHistory};
 
 use crate::{
     command::Execute,
     parser::{CommandExecution, parse_tokens},
-    reader::ShellHelper,
+    helper::ShellHelper,
     tokenize::tokenize,
 };
 
@@ -15,8 +16,9 @@ mod builtin;
 mod command;
 mod completer;
 mod executable;
+mod history;
 mod parser;
-mod reader;
+mod helper;
 mod redirect;
 mod tokenize;
 mod utils;
@@ -28,22 +30,28 @@ pub type Result<T> = std::result::Result<T, Error>;
 static PROMPT: &str = "$ ";
 static HISTORY_FILE: &str = ".history";
 
+lazy_static! {
+    pub static ref RL: Mutex<Editor<ShellHelper, FileHistory>> = {
+        let helper = ShellHelper::new();
+        let config = Config::builder()
+            .history_ignore_space(true)
+            .auto_add_history(true)
+            .edit_mode(EditMode::Emacs)
+            .completion_type(CompletionType::List)
+            .build();
+        let mut rl = Editor::with_config(config).expect("Failed to build Editor");
+        rl.set_helper(Some(helper));
+        let _ = rl.load_history(HISTORY_FILE);
+        Mutex::new(rl)
+    };
+}
+
 fn main() {
     utils::config_logger();
 
-    let helper = ShellHelper::new();
-    let config = Config::builder()
-        .history_ignore_space(true)
-        .auto_add_history(true)
-        .edit_mode(EditMode::Emacs)
-        .completion_type(CompletionType::List)
-        .build();
-    let mut rl = Editor::with_config(config).expect("Failed to build Editor");
-    rl.set_helper(Some(helper));
-    let _ = rl.load_history(HISTORY_FILE);
-
     loop {
-        match rl.readline(PROMPT) {
+        let line = RL.lock().unwrap().readline(PROMPT);
+        match line {
             Ok(line) => {
                 let tokens = tokenize(&line);
                 match parse_tokens(&tokens) {
@@ -77,5 +85,5 @@ fn main() {
         }
     }
 
-    let _ = rl.append_history(HISTORY_FILE);
+    let _ = RL.lock().unwrap().append_history(HISTORY_FILE);
 }

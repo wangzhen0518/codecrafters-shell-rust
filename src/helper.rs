@@ -24,3 +24,9 @@ impl ShellHelper {
         }
     }
 }
+
+impl Default for ShellHelper {
+    fn default() -> ShellHelper {
+        ShellHelper::new()
+    }
+}

@@ -1,9 +1,10 @@
 use std::{collections::HashSet, env, fmt::Display, io::Write, path::PathBuf};
 
 use lazy_static::lazy_static;
+use rustyline::history::History;
 
 use crate::{
-    Result,
+    RL, Result,
     command::{Execute, Parse, ParseCommandError},
     executable::{Executable, find_in_path},
     redirect::{Reader, Writer},
@@ -11,7 +12,7 @@ use crate::{
 
 lazy_static! {
     pub static ref BUILTIN_COMMANDS: HashSet<&'static str> =
-        HashSet::from(["echo", "type", "pwd", "cd", "exit"]);
+        HashSet::from(["echo", "type", "history", "pwd", "cd", "exit"]);
 }
 
 pub type ExitCode = i32;
@@ -20,6 +21,7 @@ pub type ExitCode = i32;
 pub enum BuiltinCommand {
     Echo(String),
     Type(Vec<Type>),
+    History,
     Pwd,
     Cd(String),
     Exit(ExitCode),
@@ -48,6 +50,15 @@ impl Parse for BuiltinCommand {
                 }
 
                 BuiltinCommand::Type(args.iter().map(|arg| Type::parse(arg)).collect())
+            }
+            "history" => {
+                if !args.is_empty() {
+                    return Err(
+                        ParseCommandError::MoreArgs(command.to_string(), args.to_vec(), 0).into(),
+                    );
+                }
+
+                BuiltinCommand::History
             }
             "pwd" => {
                 if !args.is_empty() {
@@ -103,6 +114,19 @@ impl Execute for BuiltinCommand {
                 for ty in types {
                     if writeln!(output_writer, "{}", ty).is_err() {
                         return -1;
+                    }
+                }
+                0
+            }
+            BuiltinCommand::History => {
+                if let Ok(rl) = RL.lock() {
+                    let history = rl.history();
+                    let num = history.len();
+                    let length = (num as f64).log10() as usize + 1;
+                    for (idx, record) in history.iter().enumerate() {
+                        if writeln!(output_writer, "   {:length$}  {}", idx + 1, record).is_err() {
+                            return -1;
+                        }
                     }
                 }
                 0
