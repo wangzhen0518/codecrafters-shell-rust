@@ -1,6 +1,7 @@
-use std::{env, path::PathBuf, process};
+use std::{collections::HashSet, env, path::PathBuf, process, sync::RwLock};
 
 use is_executable::IsExecutable;
+use lazy_static::lazy_static;
 
 use crate::{
     builtin::ExitCode,
@@ -8,13 +9,19 @@ use crate::{
     redirect::Writer,
 };
 
-pub fn load_path_var() -> String {
+lazy_static! {
+    pub static ref PATH_ENV: RwLock<String> = RwLock::new(load_env_path());
+    pub static ref PATHS: RwLock<HashSet<PathBuf>> = RwLock::new(HashSet::from_iter(load_paths()));
+}
+
+pub fn load_env_path() -> String {
     env::var("PATH").expect("Invalid $PATH")
 }
 
 #[allow(unused)]
-pub fn load_env_path() -> Vec<PathBuf> {
-    env::split_paths(&load_path_var())
+pub fn load_paths() -> Vec<PathBuf> {
+    //TODO 是否可以用 HashSet，还是应该用 Vec?
+    env::split_paths(&load_env_path())
         .filter(|path| path.is_dir())
         .collect()
 }
@@ -25,7 +32,7 @@ pub fn find_in_path(executable: &str) -> Option<PathBuf> {
         return Some(executable);
     }
 
-    for dir in env::split_paths(&load_path_var()) {
+    for dir in env::split_paths(&load_env_path()) {
         let candidate = dir.join(&executable);
         if candidate.exists() && candidate.is_executable() {
             return Some(candidate);
