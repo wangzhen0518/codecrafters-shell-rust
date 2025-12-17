@@ -20,6 +20,7 @@ mod helper;
 mod parser;
 mod redirect;
 mod tokenize;
+#[macro_use]
 mod utils;
 mod validator;
 

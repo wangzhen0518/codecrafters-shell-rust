@@ -1,10 +1,9 @@
 use std::{collections::HashSet, env, io::Write, path::PathBuf};
 
 use lazy_static::lazy_static;
-use rustyline::history::History;
 
 use crate::{
-    RL, Result,
+    Result,
     command::{Execute, Parse, ParseCommandError},
     redirect::{Reader, Writer},
 };
@@ -12,6 +11,7 @@ use crate::{
 mod history;
 mod type_;
 
+use history::History;
 use type_::Type;
 
 lazy_static! {
@@ -25,7 +25,7 @@ pub type ExitCode = i32;
 pub enum BuiltinCommand {
     Echo(String),
     Type(Type),
-    History(i64),
+    History(History),
     Pwd,
     Cd(String),
     Exit(ExitCode),
@@ -46,23 +46,9 @@ impl Parse for BuiltinCommand {
                 BuiltinCommand::Echo(content)
             }
             "type" => BuiltinCommand::Type(Type::parse(command, args)?),
-            "history" => {
-                // TODO 能否统一 check arg num 过程？
-                if args.len() > 1 {
-                    return Err(
-                        ParseCommandError::MoreArgs(command.to_string(), args.to_vec(), 1).into(),
-                    );
-                }
-
-                let n = if args.is_empty() {
-                    -1
-                } else {
-                    args[0].parse()?
-                };
-
-                BuiltinCommand::History(n)
-            }
+            "history" => BuiltinCommand::History(History::parse(command, args)?),
             "pwd" => {
+                // TODO 能否统一 check arg num 过程？
                 if !args.is_empty() {
                     return Err(
                         ParseCommandError::MoreArgs(command.to_string(), args.to_vec(), 0).into(),
@@ -113,20 +99,7 @@ impl Execute for BuiltinCommand {
                 -(writeln!(output_writer, "{}", content).is_err() as ExitCode)
             }
             BuiltinCommand::Type(ty) => ty.execute(reader, output_writer, error_writer),
-            BuiltinCommand::History(n) => {
-                if let Ok(rl) = RL.lock() {
-                    let history = rl.history();
-                    let num = history.len();
-                    let length = (num as f64).log10() as usize + 1;
-                    let n = if *n == -1 { 0 } else { num - *n as usize };
-                    for (idx, record) in history.iter().enumerate().skip(n) {
-                        if writeln!(output_writer, "   {:length$}  {}", idx + 1, record).is_err() {
-                            return -1;
-                        }
-                    }
-                }
-                0
-            }
+            BuiltinCommand::History(hist) => hist.execute(reader, output_writer, error_writer),
             BuiltinCommand::Pwd => {
                 if let Ok(pwd) = env::current_dir() {
                     -(writeln!(output_writer, "{}", pwd.display()).is_err() as ExitCode)

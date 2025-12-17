@@ -42,3 +42,15 @@ pub fn get_executables_from_dir(dir: &Path) -> Vec<PathBuf> {
         Vec::with_capacity(0)
     }
 }
+
+#[macro_export]
+macro_rules! map_err_to_exit_code {
+    ($val:expr) => {
+        match $val {
+            Ok(v) => v,
+            Err(_) => {
+                return -1;
+            }
+        }
+    };
+}
