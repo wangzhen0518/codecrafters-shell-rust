@@ -7,8 +7,8 @@ use rustyline::{CompletionType, Config, EditMode, Editor, history::FileHistory};
 
 use crate::{
     command::Execute,
-    parser::{CommandExecution, parse_tokens},
     helper::ShellHelper,
+    parser::{CommandExecution, parse_tokens},
     tokenize::tokenize,
 };
 
@@ -16,9 +16,8 @@ mod builtin;
 mod command;
 mod completer;
 mod executable;
-mod history;
-mod parser;
 mod helper;
+mod parser;
 mod redirect;
 mod tokenize;
 mod utils;
@@ -48,6 +47,8 @@ lazy_static! {
 
 fn main() {
     utils::config_logger();
+
+    tracing::debug!("{:?}", std::env::var("HISTFILE"));
 
     loop {
         let line = RL.lock().unwrap().readline(PROMPT);

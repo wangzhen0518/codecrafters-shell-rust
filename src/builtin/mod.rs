@@ -1,4 +1,4 @@
-use std::{collections::HashSet, env, fmt::Display, io::Write, path::PathBuf};
+use std::{collections::HashSet, env, io::Write, path::PathBuf};
 
 use lazy_static::lazy_static;
 use rustyline::history::History;
@@ -6,9 +6,13 @@ use rustyline::history::History;
 use crate::{
     RL, Result,
     command::{Execute, Parse, ParseCommandError},
-    executable::{Executable, find_in_path},
     redirect::{Reader, Writer},
 };
+
+mod history;
+mod type_;
+
+use type_::Type;
 
 lazy_static! {
     pub static ref BUILTIN_COMMANDS: HashSet<&'static str> =
@@ -20,7 +24,7 @@ pub type ExitCode = i32;
 #[derive(Debug, PartialEq, Eq)]
 pub enum BuiltinCommand {
     Echo(String),
-    Type(Vec<Type>),
+    Type(Type),
     History(i64),
     Pwd,
     Cd(String),
@@ -41,17 +45,9 @@ impl Parse for BuiltinCommand {
                 };
                 BuiltinCommand::Echo(content)
             }
-            "type" => {
-                // TODO 能否统一 check arg num 过程？
-                if args.is_empty() {
-                    return Err(
-                        ParseCommandError::LessArgs(command.to_string(), args.to_vec(), 1).into(),
-                    );
-                }
-
-                BuiltinCommand::Type(args.iter().map(|arg| Type::parse(arg)).collect())
-            }
+            "type" => BuiltinCommand::Type(Type::parse(command, args)?),
             "history" => {
+                // TODO 能否统一 check arg num 过程？
                 if args.len() > 1 {
                     return Err(
                         ParseCommandError::MoreArgs(command.to_string(), args.to_vec(), 1).into(),
@@ -108,7 +104,7 @@ impl Parse for BuiltinCommand {
 impl Execute for BuiltinCommand {
     fn execute(
         &self,
-        _reader: Reader,
+        reader: Reader,
         mut output_writer: Writer,
         mut error_writer: Writer,
     ) -> ExitCode {
@@ -116,14 +112,7 @@ impl Execute for BuiltinCommand {
             BuiltinCommand::Echo(content) => {
                 -(writeln!(output_writer, "{}", content).is_err() as ExitCode)
             }
-            BuiltinCommand::Type(types) => {
-                for ty in types {
-                    if writeln!(output_writer, "{}", ty).is_err() {
-                        return -1;
-                    }
-                }
-                0
-            }
+            BuiltinCommand::Type(ty) => ty.execute(reader, output_writer, error_writer),
             BuiltinCommand::History(n) => {
                 if let Ok(rl) = RL.lock() {
                     let history = rl.history();
@@ -173,45 +162,15 @@ impl Execute for BuiltinCommand {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub enum Type {
-    BuiltinCommand(String),
-    Executable(Executable),
-    UnrecognizedCommand(String),
-}
-
-impl Type {
-    fn parse(command: &str) -> Type {
-        let cmd = command.to_string();
-        if BUILTIN_COMMANDS.contains(cmd.as_str()) {
-            Type::BuiltinCommand(cmd)
-        } else if let Some(path) = find_in_path(&cmd) {
-            Type::Executable(Executable::new(cmd, path, vec![]))
-        } else {
-            Type::UnrecognizedCommand(cmd)
-        }
-    }
-}
-
-impl Display for Type {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Type::BuiltinCommand(cmd) => write!(f, "{} is a shell builtin", cmd),
-            #[allow(unused_variables)]
-            Type::Executable(Executable { name, path, args }) => {
-                write!(f, "{} is {}", name, path.display())
-            }
-            Type::UnrecognizedCommand(cmd) => write!(f, "{}: not found", cmd),
-        }
-    }
-}
-
 #[allow(unused)]
 #[cfg(test)]
 mod tests {
     use std::{env, path::PathBuf};
 
-    use crate::utils::{set_env_path, vec_str_to_vec_string};
+    use crate::{
+        executable::Executable,
+        utils::{set_env_path, vec_str_to_vec_string},
+    };
 
     use super::*;
 
@@ -239,35 +198,6 @@ mod tests {
                 .downcast::<ParseCommandError>()
                 .unwrap(),
             ParseCommandError::LessArgs("type".to_string(), vec![], 1).into()
-        );
-    }
-
-    #[test]
-    fn test_parse_type() {
-        set_env_path();
-        assert_eq!(
-            BuiltinCommand::parse(
-                "type",
-                &vec_str_to_vec_string::<Vec<_>>(&[
-                    "echo",
-                    "type",
-                    "exit",
-                    "ls",
-                    "invalid_command"
-                ])
-            )
-            .unwrap(),
-            BuiltinCommand::Type(vec![
-                Type::BuiltinCommand("echo".to_string()),
-                Type::BuiltinCommand("type".to_string()),
-                Type::BuiltinCommand("exit".to_string()),
-                Type::Executable(Executable::new(
-                    "ls".to_string(),
-                    PathBuf::from("/usr/bin/ls"),
-                    vec![],
-                )),
-                Type::UnrecognizedCommand("invalid_command".to_string()),
-            ])
         );
     }
 
