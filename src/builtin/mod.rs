@@ -3,7 +3,7 @@ use std::{collections::HashSet, env, io::Write, path::PathBuf};
 use lazy_static::lazy_static;
 
 use crate::{
-    Result,
+    HISTORY_FILE, Result,
     command::{Execute, Parse, ParseCommandError},
     redirect::{Reader, Writer},
 };
@@ -13,6 +13,8 @@ mod type_;
 
 use history::History;
 use type_::Type;
+
+pub use history::{load_history, save_history};
 
 lazy_static! {
     pub static ref BUILTIN_COMMANDS: HashSet<&'static str> =
@@ -130,7 +132,14 @@ impl Execute for BuiltinCommand {
                     0
                 }
             }
-            BuiltinCommand::Exit(exit_code) => std::process::exit(*exit_code),
+            BuiltinCommand::Exit(exit_code) => {
+                // RL.lock()
+                //     .unwrap()
+                //     .append_history(HISTORY_FILE.as_str())
+                //     .ok();
+                save_history(HISTORY_FILE.as_str(), true).ok();
+                std::process::exit(*exit_code)
+            }
         }
     }
 }

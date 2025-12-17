@@ -1,7 +1,7 @@
 use std::{
     fs::{File, OpenOptions},
     io::{BufRead, BufReader, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
     str::FromStr,
 };
 
@@ -87,59 +87,70 @@ impl Execute for History {
                 0
             }
             History::Read(file) => {
-                if let Ok(fp) = File::open(file) {
-                    let fp = BufReader::new(fp);
-                    let mut rl = map_err_to_exit_code!(RL.lock());
-                    for line in fp.lines() {
-                        let line = map_err_to_exit_code!(line);
-                        map_err_to_exit_code!(rl.add_history_entry(line));
-                    }
-                    0
-                } else {
-                    map_err_to_exit_code!(writeln!(
-                        error_writer,
-                        "Failed to read {}.",
-                        file.display()
-                    ));
+                if load_history(file).is_err() {
+                    writeln!(error_writer, "Failed to read {}.", file.display()).ok();
                     -1
+                } else {
+                    0
                 }
             }
             History::Write(file) => {
-                if let Ok(mut fp) = File::create(file) {
-                    let rl = map_err_to_exit_code!(RL.lock());
-                    let all_history = rl
-                        .history()
-                        .iter()
-                        .fold(String::new(), |acc, hist| acc + hist + "\n");
-                    map_err_to_exit_code!(fp.write_all(all_history.as_bytes()));
-                    0
-                } else {
-                    map_err_to_exit_code!(writeln!(
-                        error_writer,
-                        "Failed to write {}.",
-                        file.display()
-                    ));
+                if save_history(file, false).is_err() {
+                    writeln!(error_writer, "Failed to write {}.", file.display()).ok();
                     -1
+                } else {
+                    0
                 }
             }
             History::Append(file) => {
-                if let Ok(mut fp) = OpenOptions::new().append(true).open(file) {
-                    let rl = map_err_to_exit_code!(RL.lock());
-                    let all_history = rl
-                        .history()
-                        .iter()
-                        .fold(String::new(), |acc, hist| acc + hist + "\n");
-                    map_err_to_exit_code!(fp.write_all(all_history.as_bytes()));
-                    0
-                } else {
-                    map_err_to_exit_code!(writeln!(
-                        error_writer,
-                        "Failed to append {}.",
-                        file.display()
-                    ));
+                if save_history(file, true).is_err() {
+                    writeln!(error_writer, "Failed to append {}.", file.display()).ok();
                     -1
+                } else {
+                    0
                 }
             }
         }
     }
+}
+
+pub fn load_history<P: AsRef<Path>>(file: P) -> Result<()> {
+    let fp = BufReader::new(File::open(file)?);
+    let mut rl = RL.lock().expect("Failed to require history");
+    for line in fp.lines() {
+        rl.add_history_entry(line?).ok();
+    }
+    Ok(())
+}
+
+pub fn save_history<P: AsRef<Path>>(file: P, is_append: bool) -> Result<()> {
+    let mut fp = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .append(is_append)
+        .create(true)
+        .open(file)?;
+    let rl = RL.lock().expect("Failed to require history");
+    let hists_to_write = if is_append {
+        let mut hist_iter = rl.history().iter();
+        let mut fp_iter = BufReader::new(&fp).lines();
+
+        let mut hist = hist_iter.next();
+        let mut line = fp_iter.next();
+
+        while hist.is_some() && line.is_some() {
+            if *hist.unwrap() != line.unwrap()? {
+                break;
+            }
+            hist = hist_iter.next();
+            line = fp_iter.next();
+        }
+        hist_iter.fold(String::new(), |acc, hist| acc + hist + "\n")
+    } else {
+        rl.history()
+            .iter()
+            .fold(String::new(), |acc, hist| acc + hist + "\n")
+    };
+    fp.write_all(hists_to_write.as_bytes())?;
+    Ok(())
 }

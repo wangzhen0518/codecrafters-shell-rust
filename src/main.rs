@@ -1,11 +1,10 @@
-// #![allow(dead_code)]
-
 use std::{sync::Mutex, thread};
 
 use lazy_static::lazy_static;
 use rustyline::{CompletionType, Config, EditMode, Editor, history::FileHistory};
 
 use crate::{
+    builtin::{load_history, save_history},
     command::Execute,
     helper::ShellHelper,
     parser::{CommandExecution, parse_tokens},
@@ -28,7 +27,9 @@ pub type Error = Box<dyn std::error::Error + Send + Sync>;
 pub type Result<T> = std::result::Result<T, Error>;
 
 static PROMPT: &str = "$ ";
-static HISTORY_FILE: &str = ".history";
+lazy_static! {
+    static ref HISTORY_FILE: String = std::env::var("HISTFILE").unwrap_or(".history".to_string());
+}
 
 lazy_static! {
     pub static ref RL: Mutex<Editor<ShellHelper, FileHistory>> = {
@@ -41,7 +42,7 @@ lazy_static! {
             .build();
         let mut rl = Editor::with_config(config).expect("Failed to build Editor");
         rl.set_helper(Some(helper));
-        let _ = rl.load_history(HISTORY_FILE);
+        // let _ = rl.load_history(HISTORY_FILE.as_str());
         Mutex::new(rl)
     };
 }
@@ -49,7 +50,7 @@ lazy_static! {
 fn main() {
     utils::config_logger();
 
-    tracing::debug!("{:?}", std::env::var("HISTFILE"));
+    load_history(HISTORY_FILE.as_str()).ok();
 
     loop {
         let line = RL.lock().unwrap().readline(PROMPT);
@@ -87,5 +88,9 @@ fn main() {
         }
     }
 
-    let _ = RL.lock().unwrap().append_history(HISTORY_FILE);
+    // RL.lock()
+    //     .unwrap()
+    //     .append_history(HISTORY_FILE.as_str())
+    //     .ok();
+    save_history(HISTORY_FILE.as_str(), true).ok();
 }
