@@ -1,9 +1,4 @@
-use std::{
-    fs::{File, OpenOptions},
-    io::{BufRead, BufReader, Write},
-    path::{Path, PathBuf},
-    str::FromStr,
-};
+use std::{fs::OpenOptions, io::Write, path::PathBuf, str::FromStr, sync::atomic::Ordering};
 
 use rustyline::history::History as _;
 
@@ -11,6 +6,7 @@ use crate::{
     RL, Result,
     builtin::ExitCode,
     command::{Execute, Parse, ParseCommandError},
+    history::{CURRENT_SESSION_HISTORY, LAST_APPEND_INDEX, load_history, save_history},
     map_err_to_exit_code,
     redirect::{Reader, Writer},
 };
@@ -103,54 +99,22 @@ impl Execute for History {
                 }
             }
             History::Append(file) => {
-                if save_history(file, true).is_err() {
-                    writeln!(error_writer, "Failed to append {}.", file.display()).ok();
-                    -1
-                } else {
-                    0
+                if let Ok(mut fp) = OpenOptions::new().append(true).create(true).open(file) {
+                    let current_session_history = CURRENT_SESSION_HISTORY
+                        .lock()
+                        .expect("Failed to get current session history");
+                    let hists_to_save = current_session_history
+                        [LAST_APPEND_INDEX.load(Ordering::Relaxed)..]
+                        .iter()
+                        .fold(String::new(), |acc, hist| acc + hist + "\n");
+                    if fp.write_all(hists_to_save.as_bytes()).is_ok() {
+                        LAST_APPEND_INDEX.store(current_session_history.len(), Ordering::Relaxed);
+                        return 0;
+                    }
                 }
+                writeln!(error_writer, "Failed to append {}.", file.display()).ok();
+                -1
             }
         }
     }
-}
-
-pub fn load_history<P: AsRef<Path>>(file: P) -> Result<()> {
-    let fp = BufReader::new(File::open(file)?);
-    let mut rl = RL.lock().expect("Failed to require history");
-    for line in fp.lines() {
-        rl.add_history_entry(line?).ok();
-    }
-    Ok(())
-}
-
-pub fn save_history<P: AsRef<Path>>(file: P, is_append: bool) -> Result<()> {
-    let mut fp = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .append(is_append)
-        .create(true)
-        .open(file)?;
-    let rl = RL.lock().expect("Failed to require history");
-    let hists_to_write = if is_append {
-        let mut hist_iter = rl.history().iter();
-        let mut fp_iter = BufReader::new(&fp).lines();
-
-        let mut hist = hist_iter.next();
-        let mut line = fp_iter.next();
-
-        while hist.is_some() && line.is_some() {
-            if *hist.unwrap() != line.unwrap()? {
-                break;
-            }
-            hist = hist_iter.next();
-            line = fp_iter.next();
-        }
-        hist_iter.fold(String::new(), |acc, hist| acc + hist + "\n")
-    } else {
-        rl.history()
-            .iter()
-            .fold(String::new(), |acc, hist| acc + hist + "\n")
-    };
-    fp.write_all(hists_to_write.as_bytes())?;
-    Ok(())
 }

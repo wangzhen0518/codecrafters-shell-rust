@@ -4,9 +4,9 @@ use lazy_static::lazy_static;
 use rustyline::{CompletionType, Config, EditMode, Editor, history::FileHistory};
 
 use crate::{
-    builtin::{load_history, save_history},
     command::Execute,
     helper::ShellHelper,
+    history::{CURRENT_SESSION_HISTORY, load_history, save_history},
     parser::{CommandExecution, parse_tokens},
     tokenize::tokenize,
 };
@@ -16,6 +16,7 @@ mod command;
 mod completer;
 mod executable;
 mod helper;
+mod history;
 mod parser;
 mod redirect;
 mod tokenize;
@@ -56,6 +57,11 @@ fn main() {
         let line = RL.lock().unwrap().readline(PROMPT);
         match line {
             Ok(line) => {
+                CURRENT_SESSION_HISTORY
+                    .lock()
+                    .expect("Failed to get current session history")
+                    .push(line.clone());
+
                 let tokens = tokenize(&line);
                 match parse_tokens(&tokens) {
                     Ok(command_exec_vec) => {

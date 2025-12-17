@@ -3,9 +3,7 @@ use std::{collections::HashSet, env, io::Write, path::PathBuf};
 use lazy_static::lazy_static;
 
 use crate::{
-    HISTORY_FILE, Result,
-    command::{Execute, Parse, ParseCommandError},
-    redirect::{Reader, Writer},
+    HISTORY_FILE, Result, command::{Execute, Parse, ParseCommandError}, history::save_history, redirect::{Reader, Writer}
 };
 
 mod history;
@@ -13,8 +11,6 @@ mod type_;
 
 use history::History;
 use type_::Type;
-
-pub use history::{load_history, save_history};
 
 lazy_static! {
     pub static ref BUILTIN_COMMANDS: HashSet<&'static str> =

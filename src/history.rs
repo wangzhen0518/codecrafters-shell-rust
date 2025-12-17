@@ -1,90 +1,59 @@
-use std::path::Path;
-
-use rustyline::{
-    Config,
-    history::{DefaultHistory, FileHistory, History, SearchDirection, SearchResult},
+use std::{
+    fs::{File, OpenOptions},
+    io::{BufRead, BufReader, Write},
+    path::Path,
+    sync::{Mutex, atomic::AtomicUsize},
 };
 
-pub struct ShellHistory {
-    inner: FileHistory,
+use lazy_static::lazy_static;
+
+use crate::{RL, Result};
+
+lazy_static! {
+    pub static ref CURRENT_SESSION_HISTORY: Mutex<Vec<String>> = Mutex::new(Vec::new());
+    pub static ref LAST_APPEND_INDEX: AtomicUsize = AtomicUsize::default();
 }
 
-impl ShellHistory {
-    pub fn with_config(config: &Config) -> ShellHistory {
-        ShellHistory {
-            inner: DefaultHistory::with_config(config),
+pub fn load_history<P: AsRef<Path>>(file: P) -> Result<()> {
+    let fp = BufReader::new(File::open(file)?);
+    let mut rl = RL.lock().expect("Failed to require history");
+    for line in fp.lines() {
+        rl.add_history_entry(line?).ok();
+    }
+    Ok(())
+}
+
+pub fn save_history<P: AsRef<Path>>(file: P, is_append: bool) -> Result<()> {
+    let mut fp = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .append(is_append)
+        .create(true)
+        .open(file)?;
+    let rl = RL.lock().expect("Failed to require history");
+    let hists_to_save = if is_append {
+        let mut hist_iter = rl.history().iter();
+        let mut fp_iter = BufReader::new(&fp).lines();
+
+        let mut hist = hist_iter.next();
+        let mut line = fp_iter.next();
+
+        while hist.is_some() && line.is_some() {
+            if *hist.unwrap() != line.unwrap()? {
+                break;
+            }
+            hist = hist_iter.next();
+            line = fp_iter.next();
         }
-    }
-}
-
-impl History for ShellHistory {
-    fn get(
-        &self,
-        index: usize,
-        dir: rustyline::history::SearchDirection,
-    ) -> rustyline::Result<Option<rustyline::history::SearchResult<'_>>> {
-        self.inner.get(index, dir)
-    }
-
-    fn add(&mut self, line: &str) -> rustyline::Result<bool> {
-        self.inner.add(line)
-    }
-
-    fn add_owned(&mut self, line: String) -> rustyline::Result<bool> {
-        self.inner.add_owned(line)
-    }
-
-    fn len(&self) -> usize {
-        self.inner.len()
-    }
-
-    fn is_empty(&self) -> bool {
-        self.inner.is_empty()
-    }
-
-    fn set_max_len(&mut self, len: usize) -> rustyline::Result<()> {
-        self.inner.set_max_len(len)
-    }
-
-    fn ignore_dups(&mut self, yes: bool) -> rustyline::Result<()> {
-        self.inner.ignore_dups(yes)
-    }
-
-    fn ignore_space(&mut self, yes: bool) {
-        self.inner.ignore_space(yes);
-    }
-
-    fn save(&mut self, path: &Path) -> rustyline::Result<()> {
-        self.inner.save(path)
-    }
-
-    fn append(&mut self, path: &Path) -> rustyline::Result<()> {
-        self.inner.append(path)
-    }
-
-    fn load(&mut self, path: &Path) -> rustyline::Result<()> {
-        self.inner.load(path)
-    }
-
-    fn clear(&mut self) -> rustyline::Result<()> {
-        self.inner.clear()
-    }
-
-    fn search(
-        &self,
-        term: &str,
-        start: usize,
-        dir: SearchDirection,
-    ) -> rustyline::Result<Option<SearchResult<'_>>> {
-        self.inner.search(term, start, dir)
-    }
-
-    fn starts_with(
-        &self,
-        term: &str,
-        start: usize,
-        dir: SearchDirection,
-    ) -> rustyline::Result<Option<SearchResult<'_>>> {
-        self.inner.starts_with(term, start, dir)
-    }
+        hist_iter.fold(
+            hist.map_or(String::new(), |s| s.to_string() + "\n"),
+            |acc, hist| acc + hist + "\n",
+        )
+    } else {
+        rl.history()
+            .iter()
+            .fold(String::new(), |acc, hist| acc + hist + "\n")
+    };
+    fp.write_all(hists_to_save.as_bytes())?;
+    Ok(())
 }
